@@ -7,9 +7,9 @@ import { ResearchProgress } from "@/components/guide/research-progress";
 import { RaceSection } from "@/components/guide/race-section";
 import { MeasureCard } from "@/components/guide/measure-card";
 import { FreeGuideBrowser } from "@/components/guide/free-guide-browser";
+import { CollapsibleContent } from "@/components/guide/collapsible-content";
 import { useStreamingResearch } from "@/hooks/useStreamingResearch";
 import {
-  canAccessFeature,
   DEFAULT_ACCOUNT_SUMMARY,
   type AccountSummary,
 } from "@/lib/freemium";
@@ -24,18 +24,16 @@ import type {
   Candidate,
 } from "@/lib/types";
 import { hydrateValuesProfile } from "@/lib/types";
+import Link from "next/link";
 
-interface StarterAnalysisCache {
-  result: CandidateResult;
-}
-
-function buildStarterCacheKey(
-  valuesProfile: ValuesProfile,
-  ballotInput: BallotInput
-): string {
-  const profileHash = JSON.stringify(valuesProfile);
-  const ballotHash = JSON.stringify(ballotInput);
-  return `starter_analysis_${btoa(profileHash + ballotHash).slice(0, 64)}`;
+interface GuideAccessState {
+  unlocked: boolean;
+  canUnlock: boolean;
+  source: "existing" | "election_pass" | "power_pass" | null;
+  electionPassCredits: number;
+  powerPassRunsRemaining: number;
+  powerPassExpiresAt: string | null;
+  requiresAuth?: boolean;
 }
 
 export default function GuidePage() {
@@ -58,6 +56,8 @@ export default function GuidePage() {
   const [analyzingCandidateId, setAnalyzingCandidateId] = useState<
     string | null
   >(null);
+  const [measuresCollapsed, setMeasuresCollapsed] = useState(false);
+  const [guideAccess, setGuideAccess] = useState<GuideAccessState | null>(null);
   const skipCacheRef = useRef(false);
 
   const {
@@ -68,6 +68,7 @@ export default function GuidePage() {
     isResearching,
     error,
     startResearch,
+    stopResearch,
   } = useStreamingResearch();
 
   // Load data from sessionStorage (with Supabase fallback) and check tier
@@ -94,28 +95,49 @@ export default function GuidePage() {
       setAccount(summary);
       setTierLoaded(true);
 
-      try {
-        const cached = sessionStorage.getItem(
-          buildStarterCacheKey(
-            hydrateValuesProfile(
-              JSON.parse(profileStr) as Partial<ValuesProfile>
-            ),
-            parsedBallot
-          )
-        );
-        if (cached) {
-          const parsed = JSON.parse(cached) as StarterAnalysisCache;
-          const stillOnBallot = parsedBallot.races.some((race) =>
-            race.candidates.some(
-              (candidate) => candidate.id === parsed.result.candidateId
-            )
-          );
-          if (stillOnBallot) {
-            setStarterResult(parsed.result);
+      if (summary.isAuthenticated) {
+        try {
+          const accessResponse = await fetch("/api/guide-access", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ballotInput: parsedBallot, action: "status" }),
+          });
+          if (accessResponse.ok) {
+            const access = (await accessResponse.json()) as GuideAccessState;
+            setGuideAccess(access);
           }
+        } catch {
+          // Ignore guide-access preload failures.
         }
-      } catch {
-        // Ignore stale starter-analysis cache.
+      }
+
+      if (summary.tier === "free" || summary.tier === "pro") {
+        try {
+          const starterResponse = await fetch("/api/starter-analysis", {
+            cache: "no-store",
+          });
+          if (starterResponse.ok) {
+            const starterData = await starterResponse.json();
+            if (
+              starterData &&
+              typeof starterData === "object" &&
+              "result" in starterData &&
+              starterData.result
+            ) {
+              const result = starterData.result as CandidateResult;
+              const stillOnBallot = parsedBallot.races.some((race) =>
+                race.candidates.some(
+                  (candidate) => candidate.id === result.candidateId
+                )
+              );
+              if (stillOnBallot) {
+                setStarterResult(result);
+              }
+            }
+          }
+        } catch {
+          // Ignore starter-analysis preload failures.
+        }
       }
     }
     load();
@@ -128,7 +150,7 @@ export default function GuidePage() {
       ballotInput &&
       !hasStarted &&
       tierLoaded &&
-      canAccessFeature(account.tier, "research")
+      !!guideAccess?.unlocked
     ) {
       setHasStarted(true);
       startResearch(valuesProfile, ballotInput, {
@@ -141,8 +163,8 @@ export default function GuidePage() {
     ballotInput,
     hasStarted,
     startResearch,
-    account.tier,
     tierLoaded,
+    guideAccess?.unlocked,
   ]);
 
   // Group results by race
@@ -296,10 +318,6 @@ export default function GuidePage() {
               ? data.starterAnalysesRemaining
               : current.starterAnalysesRemaining,
         }));
-        sessionStorage.setItem(
-          buildStarterCacheKey(valuesProfile, ballotInput),
-          JSON.stringify({ result: nextResult } satisfies StarterAnalysisCache)
-        );
       } catch {
         setStarterError("Starter analysis failed. Please try again.");
       } finally {
@@ -321,6 +339,61 @@ export default function GuidePage() {
     router.push("/ballot?returnTo=guide");
   }, [router]);
 
+  const handleUnlockGuide = useCallback(async () => {
+    if (!ballotInput) return;
+
+    setSaveError(null);
+    try {
+      const response = await fetch("/api/guide-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ballotInput, action: "unlock" }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setSaveError(
+          data && typeof data === "object" && "error" in data
+            ? String(data.error)
+            : "Could not unlock this ballot."
+        );
+        return;
+      }
+
+      if (
+        data &&
+        typeof data === "object" &&
+        "unlocked" in data &&
+        data.unlocked
+      ) {
+        setGuideAccess(data as GuideAccessState);
+        setAccount((current) => ({
+          ...current,
+          tier: "pro",
+          planKey:
+            (data.source === "power_pass" ? "power_14d" : "election_pass"),
+          planLabel:
+            data.source === "power_pass" ? "Power Pass" : "Election Pass",
+          electionPassCredits:
+            typeof data.electionPassCredits === "number"
+              ? data.electionPassCredits
+              : current.electionPassCredits,
+          powerPassRunsRemaining:
+            typeof data.powerPassRunsRemaining === "number"
+              ? data.powerPassRunsRemaining
+              : current.powerPassRunsRemaining,
+          powerPassExpiresAt:
+            typeof data.powerPassExpiresAt === "string" ||
+            data.powerPassExpiresAt === null
+              ? data.powerPassExpiresAt
+              : current.powerPassExpiresAt,
+        }));
+        setHasStarted(false);
+      }
+    } catch {
+      setSaveError("Could not unlock this ballot.");
+    }
+  }, [ballotInput]);
+
   if (!valuesProfile || !ballotInput) {
     return null;
   }
@@ -336,11 +409,13 @@ export default function GuidePage() {
           <p className="mt-2 text-sm text-muted-foreground">
             {!tierLoaded
               ? "Preparing your guide..."
-              : canAccessFeature(account.tier, "research") && isResearching
+              : guideAccess?.unlocked && isResearching
               ? "Sit tight — we're doing deep research on each item to give you comprehensive, cited results. This may take a few minutes."
-              : canAccessFeature(account.tier, "research") &&
+              : guideAccess?.unlocked &&
                   (results.length > 0 || measureResults.length > 0)
                 ? "Here are your personalized recommendations."
+                : guideAccess?.canUnlock
+                  ? "This ballot is ready for a paid unlock. Use a pass to run the full guide, or keep browsing links below."
                 : account.tier === "free"
                   ? account.starterAnalysesRemaining > 0
                     ? "Browse your ballot, open source links, and use your free starter analysis on one candidate."
@@ -352,16 +427,61 @@ export default function GuidePage() {
                     : "Preparing your guide..."}
           </p>
           {tierLoaded && (
-            <div className="mt-4 flex justify-center">
+            <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              {account.planLabel}
+              {account.tier === "free"
+                ? ` • ${account.starterAnalysesRemaining} starter analysis left`
+                : ""}
+            </p>
+          )}
+          {tierLoaded && (
+            <div className="mt-4 flex flex-wrap justify-center gap-3">
               <Button variant="outline" onClick={goToBallotEditor}>
                 Edit Ballot
               </Button>
+              {!guideAccess?.unlocked && guideAccess?.canUnlock && (
+                <Button
+                  className="bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white shadow-[0_20px_40px_-20px_rgba(8,47,73,0.75)] hover:opacity-95 dark:text-white"
+                  onClick={handleUnlockGuide}
+                >
+                  {guideAccess.powerPassRunsRemaining > 0
+                    ? "Unlock with Power Pass"
+                    : "Unlock with Election Pass"}
+                </Button>
+              )}
+              {!guideAccess?.unlocked && !guideAccess?.canUnlock && account.tier !== "guest" && (
+                <Link href="/pricing">
+                  <Button className="bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white shadow-[0_20px_40px_-20px_rgba(8,47,73,0.75)] hover:opacity-95 dark:text-white">
+                    See Passes
+                  </Button>
+                </Link>
+              )}
             </div>
           )}
         </div>
 
+        {tierLoaded && account.tier === "guest" && (
+          <div className="rounded-[1.5rem] border border-primary/20 bg-primary/5 p-6 text-center">
+            <h2 className="text-lg font-semibold">Create an account to unlock the guide</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Guest mode stops at ballot building. Sign in to pick up where you
+              left off, or create a free account for candidate links and one
+              starter analysis.
+            </p>
+            <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+              <Button onClick={() => goToAuth("/auth/signup")}>Create Free Account</Button>
+              <Button variant="outline" onClick={() => goToAuth("/auth/login")}>
+                Sign In
+              </Button>
+              <Button variant="ghost" onClick={goToBallotEditor}>
+                Back to Ballot
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Error state */}
-        {canAccessFeature(account.tier, "research") && error && (
+        {guideAccess?.unlocked && error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
             <p className="font-medium">Something went wrong</p>
             <p className="mt-1">{error}</p>
@@ -379,7 +499,7 @@ export default function GuidePage() {
         )}
 
         {/* Free tier candidate browser */}
-        {tierLoaded && !canAccessFeature(account.tier, "research") && (
+        {tierLoaded && account.tier !== "guest" && !guideAccess?.unlocked && (
           <FreeGuideBrowser
             ballotInput={ballotInput}
             userTier={account.tier}
@@ -395,15 +515,22 @@ export default function GuidePage() {
         )}
 
         {/* Research progress */}
-        {canAccessFeature(account.tier, "research") && isResearching && (
-          <ResearchProgress
-            statuses={statuses}
-            measureStatuses={measureStatuses}
-          />
+        {guideAccess?.unlocked && isResearching && (
+          <div className="space-y-4">
+            <ResearchProgress
+              statuses={statuses}
+              measureStatuses={measureStatuses}
+            />
+            <div className="flex justify-center">
+              <Button variant="outline" onClick={stopResearch}>
+                Stop Research
+              </Button>
+            </div>
+          </div>
         )}
 
         {/* Per-candidate errors (when research finished but no results) */}
-        {canAccessFeature(account.tier, "research") &&
+        {guideAccess?.unlocked &&
           !isResearching &&
           results.length === 0 &&
           Object.values(statuses).some((s) => s.state === "error") && (
@@ -428,7 +555,7 @@ export default function GuidePage() {
           )}
 
         {/* Results */}
-        {canAccessFeature(account.tier, "research") && results.length > 0 && (
+        {guideAccess?.unlocked && results.length > 0 && (
           <div className="mt-8 space-y-10">
             {Array.from(resultsByRace.entries()).map(
               ([raceName, candidates]) => (
@@ -443,18 +570,37 @@ export default function GuidePage() {
         )}
 
         {/* Ballot Measure Results */}
-        {canAccessFeature(account.tier, "research") &&
+        {guideAccess?.unlocked &&
           measureResults.length > 0 && (
-          <div className="mt-10 space-y-6">
-            <h2 className="text-lg font-semibold">Ballot Measures</h2>
-            {measureResults.map((m) => (
-              <MeasureCard key={m.measureId} result={m} />
-            ))}
+          <div className="mt-10 rounded-[1.75rem] border border-black/5 bg-white/72 p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Ballot Measures</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Collapse this section to move quickly between candidate races and ballot measures.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMeasuresCollapsed((current) => !current)}
+                className="rounded-full"
+              >
+                {measuresCollapsed ? "Expand" : "Collapse"}
+              </Button>
+            </div>
+            <CollapsibleContent open={!measuresCollapsed}>
+              <div className="space-y-6">
+                {measureResults.map((m) => (
+                  <MeasureCard key={m.measureId} result={m} />
+                ))}
+              </div>
+            </CollapsibleContent>
           </div>
         )}
 
         {/* Measure research progress */}
-        {canAccessFeature(account.tier, "research") &&
+        {guideAccess?.unlocked &&
           isResearching &&
           Object.values(measureStatuses).some(
             (s) => s.state === "researching"
@@ -475,7 +621,7 @@ export default function GuidePage() {
           )}
 
         {/* Share & Navigation */}
-        {canAccessFeature(account.tier, "research") &&
+        {guideAccess?.unlocked &&
           !isResearching &&
           (results.length > 0 || measureResults.length > 0) && (
           <div className="mt-10 border-t pt-6 space-y-4">

@@ -244,6 +244,34 @@ export interface CitedClaim {
   sourceTitle: string;
 }
 
+export interface DossierIssueNote {
+  issue: Issue;
+  summary: string;
+  stance: string;
+}
+
+export interface CandidateDossier {
+  name: string;
+  party: string | null;
+  race: string;
+  state: string;
+  overview: string;
+  issueEvidence: DossierIssueNote[];
+  strengths: CitedClaim[];
+  concerns: CitedClaim[];
+  confidence: "high" | "medium" | "low";
+}
+
+export interface MeasureDossier {
+  title: string;
+  state: string;
+  summary: string;
+  yesCase: CitedClaim[];
+  noCase: CitedClaim[];
+  issueEvidence: DossierIssueNote[];
+  confidence: "high" | "medium" | "low";
+}
+
 export interface IssueAlignment {
   issue: Issue;
   score: number; // 0–100

@@ -3,13 +3,25 @@ export type UserTier = "guest" | "free" | "pro";
 export interface AccountSummary {
   tier: UserTier;
   isAuthenticated: boolean;
+  planKey: "guest" | "free" | "election_pass" | "bundle_3" | "power_14d";
+  planLabel: string;
   starterAnalysesRemaining: number;
+  electionPassCredits: number;
+  powerPassRunsRemaining: number;
+  powerPassExpiresAt: string | null;
+  checkoutConfigured: boolean;
 }
 
 export const DEFAULT_ACCOUNT_SUMMARY: AccountSummary = {
   tier: "guest",
   isAuthenticated: false,
+  planKey: "guest",
+  planLabel: "Guest",
   starterAnalysesRemaining: 0,
+  electionPassCredits: 0,
+  powerPassRunsRemaining: 0,
+  powerPassExpiresAt: null,
+  checkoutConfigured: false,
 };
 
 export function canAccessFeature(

@@ -1,28 +1,33 @@
 import { NextRequest } from "next/server";
 import {
-  createResearchStream,
-  createMeasureResearchStream,
+  personalizeCandidateDossier,
+  personalizeMeasureDossier,
   type ResearchRequest,
   type MeasureResearchRequest,
+  runCandidateDossierResearch,
+  runMeasureDossierResearch,
 } from "@/lib/anthropic";
 import type {
   ValuesProfile,
   BallotInput,
+  CandidateDossier,
   CandidateResult,
+  MeasureDossier,
   MeasureResult,
 } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
-import { getUserTierForEmail } from "@/lib/account";
+import { getGuideAccessStatus } from "@/lib/billing";
 import {
   enforceQuotaRules,
   getMaxResearchItems,
   getResearchQuotaRules,
   type QuotaResult,
 } from "@/lib/ai-quotas";
-import { canAccessFeature } from "@/lib/freemium";
 import {
   isValidBallotInput,
+  isValidCandidateDossier,
   isValidCandidateResult,
+  isValidMeasureDossier,
   isValidMeasureResult,
   isValidValuesProfile,
 } from "@/lib/validation";
@@ -30,6 +35,22 @@ import {
   sanitizeCandidateResult,
   sanitizeMeasureResult,
 } from "@/lib/research-text";
+import {
+  buildBallotHash,
+  buildResearchCacheKey,
+  loadResearchCache,
+  saveResearchCache,
+} from "@/lib/research-cache";
+import {
+  buildCandidateDossierKey,
+  buildMeasureDossierKey,
+  loadCandidateDossier,
+  loadMeasureDossier,
+  saveCandidateDossier,
+  saveMeasureDossier,
+} from "@/lib/research-dossiers";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { recordAppEvent } from "@/lib/observability";
 
 interface ResearchRequestBody {
   valuesProfile: ValuesProfile;
@@ -64,6 +85,72 @@ async function runWithConcurrencyLimit(
   );
 }
 
+async function getCandidateDossier(
+  req: ResearchRequest
+): Promise<CandidateDossier> {
+  const admin = createAdminClient();
+  const cacheKey = buildCandidateDossierKey(req.candidate, req.race, req.state);
+
+  if (admin) {
+    const cached = await loadCandidateDossier(admin, cacheKey);
+    if (cached && isValidCandidateDossier(cached)) {
+      return cached;
+    }
+  }
+
+  const dossier = await runCandidateDossierResearch(req);
+  if (!isValidCandidateDossier(dossier)) {
+    throw new Error("Candidate dossier returned an invalid result");
+  }
+
+  if (admin) {
+    void saveCandidateDossier(
+      admin,
+      cacheKey,
+      `${req.candidate.name} • ${req.race.name}`,
+      req.state,
+      dossier
+    ).catch(() => {
+      // Best-effort shared dossier cache only.
+    });
+  }
+
+  return dossier;
+}
+
+async function getMeasureDossier(
+  req: MeasureResearchRequest
+): Promise<MeasureDossier> {
+  const admin = createAdminClient();
+  const cacheKey = buildMeasureDossierKey(req.measure, req.state);
+
+  if (admin) {
+    const cached = await loadMeasureDossier(admin, cacheKey);
+    if (cached && isValidMeasureDossier(cached)) {
+      return cached;
+    }
+  }
+
+  const dossier = await runMeasureDossierResearch(req);
+  if (!isValidMeasureDossier(dossier)) {
+    throw new Error("Measure dossier returned an invalid result");
+  }
+
+  if (admin) {
+    void saveMeasureDossier(
+      admin,
+      cacheKey,
+      req.measure.title,
+      req.state,
+      dossier
+    ).catch(() => {
+      // Best-effort shared dossier cache only.
+    });
+  }
+
+  return dossier;
+}
+
 // We stream results as newline-delimited JSON (NDJSON).
 // Each line is one of:
 //   { "type": "candidate_start", "candidateId": string, "name": string, "race": string }
@@ -92,17 +179,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const tier = getUserTierForEmail(user.email);
-  if (!canAccessFeature(tier, "research")) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "Full-ballot personalized research is available on Pro. Free accounts can unlock one starter candidate analysis.",
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
   let body: unknown;
   try {
     body = await request.json();
@@ -128,6 +204,85 @@ export async function POST(request: NextRequest) {
   }
 
   const { valuesProfile, ballotInput } = body;
+  const guideAccess = await getGuideAccessStatus(
+    supabase,
+    user,
+    buildBallotHash(ballotInput)
+  );
+
+  if (!guideAccess.unlocked) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "This ballot is not unlocked for full research yet. Use an Election Pass or Power Pass to unlock it first.",
+        canUnlock: guideAccess.canUnlock,
+        electionPassCredits: guideAccess.electionPassCredits,
+        powerPassRunsRemaining: guideAccess.powerPassRunsRemaining,
+        powerPassExpiresAt: guideAccess.powerPassExpiresAt,
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const cacheKey = buildResearchCacheKey(valuesProfile, ballotInput);
+
+  const cached = await loadResearchCache(supabase, cacheKey);
+  if (cached) {
+    await recordAppEvent({
+      category: "research",
+      event: "research_cache_hit",
+      route: "/api/research",
+      userId: user.id,
+      details: { cacheKey },
+    });
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        function send(data: Record<string, unknown>) {
+          controller.enqueue(encoder.encode(JSON.stringify(data) + "\n"));
+        }
+
+        for (const result of cached.results) {
+          send({
+            type: "candidate_start",
+            candidateId: result.candidateId,
+            name: result.name,
+            race: result.race,
+          });
+          send({
+            type: "candidate_result",
+            candidateId: result.candidateId,
+            result,
+          });
+        }
+
+        for (const result of cached.measureResults) {
+          send({
+            type: "measure_start",
+            measureId: result.measureId,
+            title: result.title,
+          });
+          send({
+            type: "measure_result",
+            measureId: result.measureId,
+            result,
+          });
+        }
+
+        send({ type: "done" });
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Transfer-Encoding": "chunked",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  }
 
   // Collect all candidates across all races
   const researchItems: ResearchRequest[] = [];
@@ -180,6 +335,19 @@ export async function POST(request: NextRequest) {
       ]
     );
   } catch (err) {
+    await recordAppEvent({
+      category: "research",
+      event: "research_quota_check_failed",
+      severity: "error",
+      route: "/api/research",
+      userId: user.id,
+      details: {
+        message:
+          err instanceof Error
+            ? err.message
+            : "Failed to enforce research quotas",
+      },
+    });
     return new Response(
       JSON.stringify({
         error:
@@ -192,6 +360,18 @@ export async function POST(request: NextRequest) {
   }
 
   if (quotaFailure) {
+    await recordAppEvent({
+      category: "research",
+      event: "research_quota_reached",
+      severity: "warning",
+      route: "/api/research",
+      userId: user.id,
+      details: {
+        scope: quotaFailure.scope,
+        currentUnits: quotaFailure.currentUnits,
+        maxUnits: quotaFailure.maxUnits,
+      },
+    });
     return new Response(
       JSON.stringify({
         error:
@@ -218,6 +398,10 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(JSON.stringify(data) + "\n"));
       }
 
+      const collectedResults: CandidateResult[] = [];
+      const collectedMeasureResults: MeasureResult[] = [];
+      let hasFailures = false;
+
       const candidateTasks = researchItems.map(
         (item) => async () => {
           const candidateId = item.candidate.id;
@@ -232,38 +416,18 @@ export async function POST(request: NextRequest) {
           });
 
           try {
-            const stream = createResearchStream(item);
-            let fullText = "";
-
-            stream.on("text", (text) => {
-              fullText += text;
-              send({
-                type: "candidate_progress",
-                candidateId,
-                text: fullText,
-              });
+            send({
+              type: "candidate_progress",
+              candidateId,
+              text: "Loading shared dossier...",
             });
-
-            const finalMessage = await stream.finalMessage();
-
-            let responseText = "";
-            for (const block of finalMessage.content) {
-              if (block.type === "text") {
-                responseText += block.text;
-              }
-            }
-
-            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) {
-              send({
-                type: "candidate_error",
-                candidateId,
-                error: "Could not parse candidate research results",
-              });
-              return;
-            }
-
-            const result = JSON.parse(jsonMatch[0]) as unknown;
+            const dossier = await getCandidateDossier(item);
+            send({
+              type: "candidate_progress",
+              candidateId,
+              text: "Personalizing recommendation...",
+            });
+            const result = await personalizeCandidateDossier(item, dossier, "full");
             if (!isValidCandidateResult(result)) {
               send({
                 type: "candidate_error",
@@ -283,9 +447,11 @@ export async function POST(request: NextRequest) {
               candidateId,
               result: normalizedResult,
             });
+            collectedResults.push(normalizedResult);
           } catch (err) {
             const message =
               err instanceof Error ? err.message : "Research failed";
+            hasFailures = true;
 
             if (
               err instanceof Error &&
@@ -321,39 +487,20 @@ export async function POST(request: NextRequest) {
           });
 
           try {
-            const stream = createMeasureResearchStream(item);
-            let fullText = "";
-
-            stream.on("text", (text) => {
-              fullText += text;
-              send({
-                type: "measure_progress",
-                measureId,
-                text: fullText,
-              });
+            send({
+              type: "measure_progress",
+              measureId,
+              text: "Loading shared dossier...",
             });
-
-            const finalMessage = await stream.finalMessage();
-
-            let responseText = "";
-            for (const block of finalMessage.content) {
-              if (block.type === "text") {
-                responseText += block.text;
-              }
-            }
-
-            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) {
-              send({
-                type: "measure_error",
-                measureId,
-                error: "Could not parse measure research results",
-              });
-              return;
-            }
-
-            const result = JSON.parse(jsonMatch[0]) as unknown;
+            const dossier = await getMeasureDossier(item);
+            send({
+              type: "measure_progress",
+              measureId,
+              text: "Personalizing recommendation...",
+            });
+            const result = await personalizeMeasureDossier(item, dossier);
             if (!isValidMeasureResult(result)) {
+              hasFailures = true;
               send({
                 type: "measure_error",
                 measureId,
@@ -372,9 +519,11 @@ export async function POST(request: NextRequest) {
               measureId,
               result: normalizedResult,
             });
+            collectedMeasureResults.push(normalizedResult);
           } catch (err) {
             const message =
               err instanceof Error ? err.message : "Research failed";
+            hasFailures = true;
             send({ type: "measure_error", measureId, error: message });
           }
         }
@@ -382,6 +531,20 @@ export async function POST(request: NextRequest) {
 
       const tasks = [...candidateTasks, ...measureTasks];
       await runWithConcurrencyLimit(tasks, 3);
+
+      if (
+        !hasFailures &&
+        collectedResults.length === researchItems.length &&
+        collectedMeasureResults.length === measureItems.length
+      ) {
+        void saveResearchCache(supabase, user.id, cacheKey, {
+          results: collectedResults,
+          measureResults: collectedMeasureResults,
+        }).catch(() => {
+          // Best-effort server cache only.
+        });
+      }
+
       send({ type: "done" });
       controller.close();
     },

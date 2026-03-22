@@ -63,6 +63,7 @@ interface UseStreamingResearchReturn {
     ballotInput: BallotInput,
     options?: { skipCache?: boolean }
   ) => void;
+  stopResearch: () => void;
 }
 
 function buildCacheKey(
@@ -138,6 +139,14 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
   const [isResearching, setIsResearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const stopResearch = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsResearching(false);
+  }, []);
 
   const startResearch = useCallback(
     async (
@@ -428,6 +437,7 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
         setIsResearching(false);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
+          setIsResearching(false);
           return;
         }
         setError(
@@ -447,5 +457,6 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
     isResearching,
     error,
     startResearch,
+    stopResearch,
   };
 }

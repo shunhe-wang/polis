@@ -13,6 +13,8 @@ import {
   type ValuesProfile,
   type BallotInput,
 } from "@/lib/types";
+import { DEFAULT_ACCOUNT_SUMMARY, type AccountSummary } from "@/lib/freemium";
+import { getAccountSummary } from "@/lib/account-client";
 import { saveBallotInput, syncFromSupabase } from "@/lib/persistence";
 
 interface CivicApiResponse {
@@ -36,6 +38,9 @@ export default function BallotPage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [returnToGuide, setReturnToGuide] = useState(false);
+  const [account, setAccount] = useState<AccountSummary>(
+    DEFAULT_ACCOUNT_SUMMARY
+  );
 
   useEffect(() => {
     async function load() {
@@ -64,6 +69,8 @@ export default function BallotPage() {
         setHasSearched(true);
       }
 
+      const summary = await getAccountSummary();
+      setAccount(summary);
       setHasHydrated(true);
     }
 
@@ -143,6 +150,10 @@ export default function BallotPage() {
 
     sessionStorage.setItem("ballotInput", JSON.stringify(ballotInput));
     void saveBallotInput(ballotInput);
+    if (account.tier === "guest") {
+      router.push("/start?intent=guide");
+      return;
+    }
     router.push("/guide");
   };
 
@@ -181,6 +192,16 @@ export default function BallotPage() {
                 Back to Guide
               </Button>
             </div>
+          </div>
+        )}
+
+        {!returnToGuide && account.tier === "guest" && (
+          <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <p className="text-sm font-medium">Guest mode stops at the ballot</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Build your ballot now, then create a free account to unlock
+              candidate links and your starter analysis.
+            </p>
           </div>
         )}
 
@@ -276,7 +297,13 @@ export default function BallotPage() {
             )}
           </div>
           <Button onClick={handleContinue} disabled={!canContinue}>
-            {returnToGuide ? "Update Guide" : "Generate Voter Guide"}
+            {returnToGuide
+              ? "Update Guide"
+              : account.tier === "guest"
+              ? "Continue to Account Options"
+              : account.tier === "free"
+                ? "Browse Candidates & Use Free Analysis"
+                : "Generate Voter Guide"}
           </Button>
         </div>
 

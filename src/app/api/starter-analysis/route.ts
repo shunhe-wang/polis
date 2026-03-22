@@ -1,21 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getUserTierForEmail } from "@/lib/account";
+import { getAccountPlan, getCurrentEntitlements } from "@/lib/billing";
 import {
   enforceStarterAnalysisQuota,
   getStarterAnalysisLimit,
   getStarterAnalysisRemaining,
 } from "@/lib/ai-quotas";
-import { runStarterCandidateAnalysis } from "@/lib/anthropic";
+import {
+  personalizeCandidateDossier,
+  runCandidateDossierResearch,
+} from "@/lib/anthropic";
 import { canAccessFeature } from "@/lib/freemium";
 import { sanitizeCandidateResult } from "@/lib/research-text";
+import { buildStarterAnalysisHashes } from "@/lib/research-cache";
+import {
+  buildCandidateDossierKey,
+  loadCandidateDossier,
+  saveCandidateDossier,
+} from "@/lib/research-dossiers";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { recordAppEvent } from "@/lib/observability";
 import {
   isValidCandidate,
+  isValidCandidateDossier,
   isValidCandidateResult,
   isValidRace,
   isValidValuesProfile,
 } from "@/lib/validation";
-import type { Candidate, Race, ValuesProfile } from "@/lib/types";
+import type {
+  Candidate,
+  CandidateResult,
+  Race,
+  ValuesProfile,
+} from "@/lib/types";
 
 interface StarterAnalysisBody {
   valuesProfile: ValuesProfile;
@@ -70,7 +87,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const tier = getUserTierForEmail(user.email);
+  const entitlements = await getCurrentEntitlements(supabase, user.id);
+  const tier = getAccountPlan(user, entitlements).tier;
   if (!canAccessFeature(tier, "starter_analysis")) {
     return NextResponse.json(
       { error: "Starter analysis is not available for this account." },
@@ -99,10 +117,57 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const ballotInput = {
+    address: "",
+    state: body.state,
+    races: [body.race],
+    measures: [],
+  };
+  const { valuesProfileHash, ballotHash } = buildStarterAnalysisHashes(
+    body.valuesProfile,
+    ballotInput
+  );
+  const { data: existingAnalysis } = await supabase
+    .from("starter_candidate_analyses")
+    .select("candidate_id, result")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (existingAnalysis) {
+    const cachedResult = sanitizeCandidateResult(
+      existingAnalysis.result as CandidateResult
+    );
+    if (existingAnalysis.candidate_id === body.candidate.id) {
+      return NextResponse.json({
+        result: cachedResult,
+        starterAnalysesRemaining: tier === "free" ? 0 : getStarterAnalysisLimit(),
+      });
+    }
+
+    if (tier === "free") {
+      return NextResponse.json(
+        {
+          error:
+            "Your free starter analysis is already tied to another candidate. Upgrade to unlock full-ballot research.",
+          starterAnalysesRemaining: 0,
+          result: cachedResult,
+        },
+        { status: 403 }
+      );
+    }
+  }
+
   if (tier === "free") {
     try {
       const quotaFailure = await enforceStarterAnalysisQuota(supabase);
       if (quotaFailure) {
+        await recordAppEvent({
+          category: "research",
+          event: "starter_quota_reached",
+          severity: "warning",
+          route: "/api/starter-analysis",
+          userId: user.id,
+        });
         return NextResponse.json(
           {
             error:
@@ -113,6 +178,19 @@ export async function POST(request: NextRequest) {
         );
       }
     } catch (error) {
+      await recordAppEvent({
+        category: "research",
+        event: "starter_quota_failed",
+        severity: "error",
+        route: "/api/starter-analysis",
+        userId: user.id,
+        details: {
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to enforce starter analysis quota",
+        },
+      });
       return NextResponse.json(
         {
           error:
@@ -126,12 +204,57 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await runStarterCandidateAnalysis({
+    const researchRequest = {
       candidate: body.candidate,
       race: body.race,
       state: body.state,
       profile: body.valuesProfile,
-    });
+    };
+    const admin = createAdminClient();
+    const dossierKey = buildCandidateDossierKey(
+      body.candidate,
+      body.race,
+      body.state
+    );
+
+    let dossier = admin
+      ? await loadCandidateDossier(admin, dossierKey)
+      : null;
+
+    if (!dossier || !isValidCandidateDossier(dossier)) {
+      dossier = await runCandidateDossierResearch(researchRequest);
+      if (!isValidCandidateDossier(dossier)) {
+        await recordAppEvent({
+          category: "research",
+          event: "starter_invalid_dossier",
+          severity: "error",
+          route: "/api/starter-analysis",
+          userId: user.id,
+        });
+        return NextResponse.json(
+          { error: "Starter analysis returned an invalid dossier" },
+          { status: 502 }
+        );
+      }
+
+      if (admin) {
+        void saveCandidateDossier(
+          admin,
+          dossierKey,
+          `${body.candidate.name} • ${body.race.name}`,
+          body.state,
+          dossier
+        ).catch(() => {
+          // Best-effort shared dossier cache only.
+        });
+      }
+    }
+
+    const result = await personalizeCandidateDossier(
+      researchRequest,
+      dossier,
+      "starter"
+    );
 
     const sanitizedResult = sanitizeCandidateResult({
       ...result,
@@ -150,11 +273,37 @@ export async function POST(request: NextRequest) {
         ? await getStarterAnalysisRemaining(supabase)
         : getStarterAnalysisLimit();
 
+    await supabase.from("starter_candidate_analyses").upsert(
+      {
+        user_id: user.id,
+        candidate_id: body.candidate.id,
+        candidate_name: body.candidate.name,
+        race_id: body.race.id,
+        race_name: body.race.name,
+        values_profile_hash: valuesProfileHash,
+        ballot_hash: ballotHash,
+        result: sanitizedResult,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+
     return NextResponse.json({
       result: sanitizedResult,
       starterAnalysesRemaining,
     });
   } catch (error) {
+    await recordAppEvent({
+      category: "research",
+      event: "starter_analysis_failed",
+      severity: "error",
+      route: "/api/starter-analysis",
+      userId: user.id,
+      details: {
+        message:
+          error instanceof Error ? error.message : "Starter analysis failed",
+      },
+    });
     return NextResponse.json(
       {
         error:
@@ -165,4 +314,35 @@ export async function POST(request: NextRequest) {
       { status: 502 }
     );
   }
+}
+
+export async function GET() {
+  const supabase = await createClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Authentication is not configured" },
+      { status: 503 }
+    );
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json(
+      { error: "Authentication required" },
+      { status: 401 }
+    );
+  }
+
+  const { data } = await supabase
+    .from("starter_candidate_analyses")
+    .select("result")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  return NextResponse.json({
+    result: data?.result ? sanitizeCandidateResult(data.result as CandidateResult) : null,
+  });
 }

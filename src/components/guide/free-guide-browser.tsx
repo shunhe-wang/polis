@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { CandidateCard } from "@/components/guide/candidate-card";
+import { CollapsibleContent } from "@/components/guide/collapsible-content";
 import { buildCandidateSourceLinks } from "@/lib/candidate-links";
 import type {
   BallotInput,
@@ -41,6 +42,7 @@ export function FreeGuideBrowser({
   onEditBallot,
 }: FreeGuideBrowserProps) {
   const [collapsedRaceIds, setCollapsedRaceIds] = useState<string[]>([]);
+  const [measuresCollapsed, setMeasuresCollapsed] = useState(false);
   const starterPlanCopy =
     userTier === "guest"
       ? "Browse your ballot, open source links for each candidate, and create a free account to unlock 1 starter candidate analysis."
@@ -60,7 +62,7 @@ export function FreeGuideBrowser({
               </p>
               <p className="text-sm text-muted-foreground">
                 Full personalized ballot research, measure analysis, and
-                sharing stay on Pro.
+                sharing unlock with a paid pass.
               </p>
             </div>
             {userTier === "guest" && (
@@ -127,8 +129,8 @@ export function FreeGuideBrowser({
             </Button>
           </div>
 
-          {!collapsedRaceIds.includes(race.id) && (
-            <div className="mt-4 space-y-3">
+          <CollapsibleContent open={!collapsedRaceIds.includes(race.id)}>
+            <div className="space-y-3">
             {race.candidates.map((candidate) => {
               const isUnlockedCandidate =
                 starterResult?.candidateId === candidate.id;
@@ -211,18 +213,39 @@ export function FreeGuideBrowser({
               );
             })}
             </div>
-          )}
+          </CollapsibleContent>
         </section>
       ))}
 
       {ballotInput.measures.length > 0 && (
         <section className="space-y-3 rounded-[1.75rem] border border-black/5 bg-white/72 p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold">Ballot Measures</h2>
-            <Badge variant="secondary" className="text-xs">
-              Pro Analysis
-            </Badge>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold">Ballot Measures</h2>
+              <Badge variant="secondary" className="text-xs">
+                Paid Pass
+              </Badge>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMeasuresCollapsed((current) => !current)}
+              className="rounded-full"
+            >
+              {measuresCollapsed ? (
+                <>
+                  <ChevronDown />
+                  Expand
+                </>
+              ) : (
+                <>
+                  <ChevronUp />
+                  Collapse
+                </>
+              )}
+            </Button>
           </div>
+          <CollapsibleContent open={!measuresCollapsed}>
           <div className="space-y-3">
             {ballotInput.measures.map((measure) => (
               <Card key={measure.id}>
@@ -235,6 +258,7 @@ export function FreeGuideBrowser({
               </Card>
             ))}
           </div>
+          </CollapsibleContent>
         </section>
       )}
 

@@ -1,21 +1,29 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, LogIn, UserPlus, UserRound } from "lucide-react";
+import { ArrowRight, Crown, LogIn, UserPlus, UserRound } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function StartPage() {
   const router = useRouter();
+  const [intentGuide] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("intent") === "guide";
+  });
 
   const goToAuth = useCallback(
     (path: string) => {
-      sessionStorage.setItem("authReturnTo", "/onboarding");
+      sessionStorage.setItem(
+        "authReturnTo",
+        intentGuide ? "/guide" : "/onboarding"
+      );
       router.push(path);
     },
-    [router]
+    [intentGuide, router]
   );
 
   return (
@@ -31,7 +39,7 @@ export default function StartPage() {
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             If you sign in now, your values profile and ballot will be saved as
             you go. If you continue as a guest, you can still build your ballot
-            and explore before deciding to create an account.
+            before deciding to create an account.
           </p>
         </div>
 
@@ -75,17 +83,17 @@ export default function StartPage() {
               <UserRound className="size-6 text-cyan-700 dark:text-cyan-300" />
               <h2 className="mt-4 text-lg font-semibold">Continue as Guest</h2>
               <p className="mt-2 flex-1 text-sm text-muted-foreground">
-                Start the questionnaire and build your ballot first. You can
-                create an account later if you want to save progress and unlock
-                more research.
+                {intentGuide
+                  ? "You can return to your ballot, but guest mode will stop there until you create an account."
+                  : "Start the questionnaire and build your ballot first. You can create an account later if you want to save progress and unlock more research."}
               </p>
               <Link
-                href="/onboarding"
+                href={intentGuide ? "/ballot" : "/onboarding"}
                 className={buttonVariants({
                   className: "mt-5 rounded-full",
                 })}
               >
-                Continue as Guest
+                {intentGuide ? "Back to Ballot" : "Continue as Guest"}
                 <ArrowRight />
               </Link>
             </CardContent>
@@ -93,12 +101,24 @@ export default function StartPage() {
         </div>
 
         <div className="rounded-[1.5rem] border border-black/5 bg-background/70 p-5 text-sm text-muted-foreground dark:border-white/10">
-          <p className="font-medium text-foreground">About paid access</p>
+          <div className="flex items-center gap-2">
+            <Crown className="size-4 text-cyan-700 dark:text-cyan-300" />
+            <p className="font-medium text-foreground">Paid passes unlock the full guide</p>
+          </div>
           <p className="mt-2">
-            Pro still unlocks full-ballot personalized research and sharing, but
-            billing itself is not wired up yet. Right now, free vs. Pro access
-            is still controlled server-side.
+            Election passes unlock full-ballot personalized research,
+            ballot-measure analysis, and sharing when you need them. Free
+            accounts get candidate links plus one starter analysis.
           </p>
+          <Link
+            href="/pricing"
+            className={buttonVariants({
+              variant: "outline",
+              className: "mt-4 rounded-full",
+            })}
+          >
+            View Plans
+          </Link>
         </div>
       </div>
     </main>

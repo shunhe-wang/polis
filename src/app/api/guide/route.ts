@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserTierForEmail } from "@/lib/account";
-import { canAccessFeature } from "@/lib/freemium";
+import { getGuideAccessStatus } from "@/lib/billing";
 import { createClient } from "@/lib/supabase/server";
 import type {
   ValuesProfile,
@@ -18,6 +17,7 @@ import {
   sanitizeMeasureResult,
   sanitizeRaceRecommendation,
 } from "@/lib/research-text";
+import { buildBallotHash } from "@/lib/research-cache";
 
 interface SaveGuideBody {
   valuesProfile: ValuesProfile;
@@ -63,13 +63,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!canAccessFeature(getUserTierForEmail(user.email), "share")) {
-    return NextResponse.json(
-      { error: "Save and share is available on Pro." },
-      { status: 403 }
-    );
-  }
-
   let body: SaveGuideBody;
   try {
     body = await request.json();
@@ -81,6 +74,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Invalid guide payload" },
       { status: 400 }
+    );
+  }
+
+  const guideAccess = await getGuideAccessStatus(
+    supabase,
+    user,
+    buildBallotHash(body.ballotInput)
+  );
+  if (!guideAccess.unlocked) {
+    return NextResponse.json(
+      { error: "Unlock this ballot before saving and sharing the guide." },
+      { status: 403 }
     );
   }
 

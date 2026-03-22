@@ -4,8 +4,11 @@ import type {
   Race,
   Candidate,
   BallotMeasure,
+  CandidateDossier,
   CandidateResult,
   Issue,
+  MeasureDossier,
+  MeasureResult,
   PolicySignal,
 } from "./types";
 import {
@@ -67,6 +70,7 @@ function buildUserPrompt(
   race: Race,
   state: string,
   profile: ValuesProfile,
+  dossier: CandidateDossier,
   mode: "full" | "starter" = "full"
 ): string {
   const starterInstructions =
@@ -74,7 +78,7 @@ function buildUserPrompt(
       ? "\nStarter mode: keep the reasoning to one short paragraph, keep source-backed likes and concerns to 2 items each, and focus on the clearest factors a voter would care about."
       : "\nFull mode: keep the reasoning to 1-2 short paragraphs and keep every bullet concise.";
 
-  return `Research the following candidate and evaluate alignment with my values profile.
+  return `Use the dossier below to evaluate how well this candidate aligns with my values profile.
 
 ## Candidate
 - Name: ${candidate.name}
@@ -95,8 +99,11 @@ ${profile.freeText || "No additional context provided."}
 ### Political identity
 ${profile.politicalIdentity ?? "Not specified"}
 
+## Neutral Candidate Dossier
+${JSON.stringify(dossier, null, 2)}
+
 ## Instructions
-Search for this candidate's recent positions, voting record, public statements, endorsements, and donor information. Then provide your analysis as a JSON object with this exact structure:
+Do not do fresh web research. Use only the dossier above and synthesize a personalized recommendation as a JSON object with this exact structure:
 
 {
   "candidateId": "${candidate.id}",
@@ -137,9 +144,10 @@ Keep every likes and concerns item to one sentence. Include 2 concise items each
 function buildMeasurePrompt(
   measure: BallotMeasure,
   state: string,
-  profile: ValuesProfile
+  profile: ValuesProfile,
+  dossier: MeasureDossier
 ): string {
-  return `Research the following ballot measure and evaluate how it aligns with my values profile.
+  return `Use the dossier below to evaluate how this ballot measure aligns with my values profile.
 
 ## Ballot Measure
 - Title: ${measure.title}
@@ -160,8 +168,11 @@ ${profile.freeText || "No additional context provided."}
 ### Political identity
 ${profile.politicalIdentity ?? "Not specified"}
 
+## Neutral Measure Dossier
+${JSON.stringify(dossier, null, 2)}
+
 ## Instructions
-Search the web for information about this ballot measure — who supports it, who opposes it, what it would actually do, and its likely impact. Then provide your analysis as a JSON object with this exact structure:
+Do not do fresh web research. Use only the dossier above and provide your analysis as a JSON object with this exact structure:
 
 {
   "measureId": "${measure.id}",
@@ -203,53 +214,122 @@ export interface MeasureResearchRequest {
   profile: ValuesProfile;
 }
 
-export function createResearchStream(req: ResearchRequest) {
-  const userPrompt = buildUserPrompt(
-    req.candidate,
-    req.race,
-    req.state,
-    req.profile,
-    "full"
-  );
+function buildCandidateDossierPrompt(
+  candidate: Candidate,
+  race: Race,
+  state: string
+): string {
+  return `Research this candidate and produce a neutral dossier.
 
-  return anthropic.messages.stream({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    tools: [
-      {
-        type: "web_search_20250305" as const,
-        name: "web_search" as const,
-        max_uses: 10,
-      },
-    ],
-    messages: [{ role: "user", content: userPrompt }],
-  });
+## Candidate
+- Name: ${candidate.name}
+- Race: ${race.name}
+- Party: ${candidate.party ?? "Unknown"}
+- Location: ${state}
+
+## Instructions
+Search the web for recent, credible information about the candidate's platform, record, public statements, endorsements, and major points of criticism. Then return ONLY valid JSON with this exact structure:
+
+{
+  "name": "${candidate.name}",
+  "party": ${candidate.party ? `"${candidate.party}"` : "null"},
+  "race": "${race.name}",
+  "state": "${state}",
+  "overview": "<2-3 sentence neutral summary of who this candidate is and what they emphasize>",
+  "issueEvidence": [
+    {
+      "issue": "<issue key from: economy, healthcare, climate, immigration, housing, civil_liberties, foreign_policy, education, crypto_tech>",
+      "summary": "<1 short sentence on what the candidate appears to support or oppose>",
+      "stance": "<quote-free plain-language description of the candidate's position or lack of clarity>"
+    }
+  ],
+  "strengths": [
+    {
+      "text": "<1 short source-backed point in the candidate's favor>",
+      "sourceUrl": "<url>",
+      "sourceTitle": "<source name>"
+    }
+  ],
+  "concerns": [
+    {
+      "text": "<1 short source-backed concern or criticism>",
+      "sourceUrl": "<url>",
+      "sourceTitle": "<source name>"
+    }
+  ],
+  "confidence": "<high|medium|low>"
 }
 
-export async function runStarterCandidateAnalysis(
-  req: ResearchRequest
-): Promise<CandidateResult> {
-  const userPrompt = buildUserPrompt(
-    req.candidate,
-    req.race,
-    req.state,
-    req.profile,
-    "starter"
-  );
+Keep the overview concise. Include all 9 issues in issueEvidence, using unknown/unclear language when information is thin. Include 2 concise items each for strengths and concerns. Return ONLY the JSON object.`;
+}
 
+function buildMeasureDossierPrompt(
+  measure: BallotMeasure,
+  state: string
+): string {
+  return `Research this ballot measure and produce a neutral dossier.
+
+## Ballot Measure
+- Title: ${measure.title}
+- Type: ${measure.type}
+- Location: ${state}
+- Description: ${measure.description}
+
+## Instructions
+Search the web for credible information about what this measure would do, who supports it, who opposes it, and its likely practical impact. Then return ONLY valid JSON with this exact structure:
+
+{
+  "title": "${measure.title}",
+  "state": "${state}",
+  "summary": "<2-3 sentence neutral explanation of what the measure does>",
+  "yesCase": [
+    {
+      "text": "<1 short source-backed argument from supporters>",
+      "sourceUrl": "<url>",
+      "sourceTitle": "<source name>"
+    }
+  ],
+  "noCase": [
+    {
+      "text": "<1 short source-backed argument from opponents>",
+      "sourceUrl": "<url>",
+      "sourceTitle": "<source name>"
+    }
+  ],
+  "issueEvidence": [
+    {
+      "issue": "<issue key from: economy, healthcare, climate, immigration, housing, civil_liberties, foreign_policy, education, crypto_tech>",
+      "summary": "<1 short sentence about how the measure could affect this issue>",
+      "stance": "<plain-language explanation of the likely effect or uncertainty>"
+    }
+  ],
+  "confidence": "<high|medium|low>"
+}
+
+Include all 9 issues in issueEvidence, using unknown/indirect language when the connection is weak. Include 2 concise items each for yesCase and noCase. Return ONLY the JSON object.`;
+}
+
+async function runJsonCompletion<T>(options: {
+  model: string;
+  maxTokens: number;
+  prompt: string;
+  webSearchMaxUses?: number;
+  parseError: string;
+}): Promise<T> {
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 2200,
+    model: options.model,
+    max_tokens: options.maxTokens,
     system: SYSTEM_PROMPT,
-    tools: [
-      {
-        type: "web_search_20250305" as const,
-        name: "web_search" as const,
-        max_uses: 4,
-      },
-    ],
-    messages: [{ role: "user", content: userPrompt }],
+    tools: options.webSearchMaxUses
+      ? [
+          {
+            type: "web_search_20250305" as const,
+            name: "web_search" as const,
+            max_uses: options.webSearchMaxUses,
+          },
+        ]
+      : undefined,
+    messages: [{ role: "user", content: options.prompt }],
   });
 
   let responseText = "";
@@ -261,26 +341,67 @@ export async function runStarterCandidateAnalysis(
 
   const jsonMatch = responseText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error("Could not parse starter analysis results");
+    throw new Error(options.parseError);
   }
 
-  return JSON.parse(jsonMatch[0]) as CandidateResult;
+  return JSON.parse(jsonMatch[0]) as T;
 }
 
-export function createMeasureResearchStream(req: MeasureResearchRequest) {
-  const userPrompt = buildMeasurePrompt(req.measure, req.state, req.profile);
+export function runCandidateDossierResearch(
+  req: ResearchRequest
+): Promise<CandidateDossier> {
+  return runJsonCompletion<CandidateDossier>({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 2600,
+    prompt: buildCandidateDossierPrompt(req.candidate, req.race, req.state),
+    webSearchMaxUses: 5,
+    parseError: "Could not parse candidate dossier",
+  });
+}
 
-  return anthropic.messages.stream({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    tools: [
-      {
-        type: "web_search_20250305" as const,
-        name: "web_search" as const,
-        max_uses: 10,
-      },
-    ],
-    messages: [{ role: "user", content: userPrompt }],
+export function personalizeCandidateDossier(
+  req: ResearchRequest,
+  dossier: CandidateDossier,
+  mode: "full" | "starter" = "full"
+): Promise<CandidateResult> {
+  return runJsonCompletion<CandidateResult>({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: mode === "starter" ? 1800 : 2600,
+    prompt: buildUserPrompt(
+      req.candidate,
+      req.race,
+      req.state,
+      req.profile,
+      dossier,
+      mode
+    ),
+    parseError:
+      mode === "starter"
+        ? "Could not parse starter analysis results"
+        : "Could not parse personalized candidate research",
+  });
+}
+
+export function runMeasureDossierResearch(
+  req: MeasureResearchRequest
+): Promise<MeasureDossier> {
+  return runJsonCompletion<MeasureDossier>({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 2600,
+    prompt: buildMeasureDossierPrompt(req.measure, req.state),
+    webSearchMaxUses: 5,
+    parseError: "Could not parse measure dossier",
+  });
+}
+
+export function personalizeMeasureDossier(
+  req: MeasureResearchRequest,
+  dossier: MeasureDossier
+): Promise<MeasureResult> {
+  return runJsonCompletion<MeasureResult>({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 2200,
+    prompt: buildMeasurePrompt(req.measure, req.state, req.profile, dossier),
+    parseError: "Could not parse personalized measure research",
   });
 }

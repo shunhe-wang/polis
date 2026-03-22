@@ -6,10 +6,12 @@ import {
   type BallotInput,
   type BallotMeasure,
   type Candidate,
+  type CandidateDossier,
   type CandidateResult,
   type CitedClaim,
   type Issue,
   type IssueAlignment,
+  type MeasureDossier,
   type MeasureResult,
   type Race,
   type RaceRecommendation,
@@ -79,6 +81,15 @@ function isIssueAlignment(value: unknown): value is IssueAlignment {
     isString(value.summary) &&
     isString(value.candidatePosition) &&
     isIntegerInRange(value.userPriority, 1, 5)
+  );
+}
+
+function isDossierIssueNote(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    isIssue(value.issue) &&
+    isString(value.summary) &&
+    isString(value.stance)
   );
 }
 
@@ -191,6 +202,36 @@ export function isValidCandidateResult(
   );
 }
 
+export function isValidCandidateDossier(
+  value: unknown
+): value is CandidateDossier {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.issueEvidence) ||
+    !Array.isArray(value.strengths) ||
+    !Array.isArray(value.concerns)
+  ) {
+    return false;
+  }
+
+  return (
+    isString(value.name) &&
+    value.name.trim().length > 0 &&
+    isNullableString(value.party) &&
+    isString(value.race) &&
+    value.race.trim().length > 0 &&
+    isString(value.state) &&
+    value.state.trim().length > 0 &&
+    isString(value.overview) &&
+    value.issueEvidence.every(isDossierIssueNote) &&
+    value.strengths.every(isCitedClaim) &&
+    value.concerns.every(isCitedClaim) &&
+    (value.confidence === "high" ||
+      value.confidence === "medium" ||
+      value.confidence === "low")
+  );
+}
+
 export function isValidMeasureResult(value: unknown): value is MeasureResult {
   if (
     !isRecord(value) ||
@@ -216,6 +257,31 @@ export function isValidMeasureResult(value: unknown): value is MeasureResult {
       value.confidence === "medium" ||
       value.confidence === "low") &&
     isString(value.reasoning)
+  );
+}
+
+export function isValidMeasureDossier(value: unknown): value is MeasureDossier {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.yesCase) ||
+    !Array.isArray(value.noCase) ||
+    !Array.isArray(value.issueEvidence)
+  ) {
+    return false;
+  }
+
+  return (
+    isString(value.title) &&
+    value.title.trim().length > 0 &&
+    isString(value.state) &&
+    value.state.trim().length > 0 &&
+    isString(value.summary) &&
+    value.yesCase.every(isCitedClaim) &&
+    value.noCase.every(isCitedClaim) &&
+    value.issueEvidence.every(isDossierIssueNote) &&
+    (value.confidence === "high" ||
+      value.confidence === "medium" ||
+      value.confidence === "low")
   );
 }
 

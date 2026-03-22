@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CandidateCard } from "./candidate-card";
+import { CollapsibleContent } from "./collapsible-content";
 import type { CandidateResult } from "@/lib/types";
 
 interface RaceSectionProps {
@@ -76,8 +77,9 @@ export function RaceSection({ raceName, candidates }: RaceSectionProps) {
       </div>
 
       {/* Side-by-side comparison bar */}
-      {!isCollapsed && sorted.length > 1 && (
-        <div className="mt-4 flex gap-1 overflow-hidden rounded-2xl border border-black/5 bg-background/70 p-1 dark:border-white/10">
+      <CollapsibleContent open={!isCollapsed}>
+        {sorted.length > 1 && (
+        <div className="flex gap-1 overflow-hidden rounded-2xl border border-black/5 bg-background/70 p-1 dark:border-white/10">
           {sorted.map((c) => {
             const width = Math.max(
               (c.alignmentScore / sorted.reduce((a, b) => a + b.alignmentScore, 0)) * 100,
@@ -95,11 +97,9 @@ export function RaceSection({ raceName, candidates }: RaceSectionProps) {
             );
           })}
         </div>
-      )}
+        )}
 
-      {/* Candidate cards */}
-      {!isCollapsed && (
-        <div className="mt-4 space-y-4">
+        <div className={sorted.length > 1 ? "mt-4 space-y-4" : "space-y-4"}>
           {sorted.map((candidate) => (
             <CandidateCard
               key={candidate.candidateId}
@@ -111,7 +111,7 @@ export function RaceSection({ raceName, candidates }: RaceSectionProps) {
             />
           ))}
         </div>
-      )}
+      </CollapsibleContent>
     </section>
   );
 }
