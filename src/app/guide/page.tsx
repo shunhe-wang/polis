@@ -14,6 +14,7 @@ import {
   type AccountSummary,
 } from "@/lib/freemium";
 import { getAccountSummary } from "@/lib/account-client";
+import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
 import { syncFromSupabase } from "@/lib/persistence";
 import type {
   ValuesProfile,
@@ -46,6 +47,7 @@ export default function GuidePage() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountSummary>(
     DEFAULT_ACCOUNT_SUMMARY
   );
@@ -77,8 +79,8 @@ export default function GuidePage() {
       // Try to sync from Supabase if sessionStorage is empty
       await syncFromSupabase();
 
-      const profileStr = sessionStorage.getItem("valuesProfile");
-      const ballotStr = sessionStorage.getItem("ballotInput");
+      const profileStr = safeSessionStorageGet("valuesProfile");
+      const ballotStr = safeSessionStorageGet("ballotInput");
 
       if (!profileStr || !ballotStr) {
         router.push("/onboarding");
@@ -329,7 +331,12 @@ export default function GuidePage() {
 
   const goToAuth = useCallback(
     (path: string) => {
-      sessionStorage.setItem("authReturnTo", "/guide");
+      const saved = safeSessionStorageSet("authReturnTo", "/guide");
+      if (!saved) {
+        setStorageError(
+          "Could not save your return path in browser storage. You may need to come back to the guide manually after signing in."
+        );
+      }
       router.push(path);
     },
     [router]
@@ -343,6 +350,16 @@ export default function GuidePage() {
     if (!ballotInput) return;
 
     setSaveError(null);
+    const confirmed = window.confirm(
+      guideAccess?.powerPassRunsRemaining &&
+        guideAccess.powerPassRunsRemaining > 0
+        ? "Unlock this ballot and use 1 Power Pass run?"
+        : "Unlock this ballot and consume 1 Election Pass credit?"
+    );
+    if (!confirmed) {
+      return;
+    }
+
     try {
       const response = await fetch("/api/guide-access", {
         method: "POST",
@@ -392,7 +409,7 @@ export default function GuidePage() {
     } catch {
       setSaveError("Could not unlock this ballot.");
     }
-  }, [ballotInput]);
+  }, [ballotInput, guideAccess?.powerPassRunsRemaining]);
 
   if (!valuesProfile || !ballotInput) {
     return null;
@@ -434,6 +451,15 @@ export default function GuidePage() {
                 : ""}
             </p>
           )}
+          {ballotInput.election && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              {ballotInput.election.name} on{" "}
+              {new Date(ballotInput.election.electionDay).toLocaleDateString()}
+              {ballotInput.election.selectedParty
+                ? ` • ${ballotInput.election.selectedParty} ballot`
+                : ""}
+            </p>
+          )}
           {tierLoaded && (
             <div className="mt-4 flex flex-wrap justify-center gap-3">
               <Button variant="outline" onClick={goToBallotEditor}>
@@ -457,6 +483,11 @@ export default function GuidePage() {
                 </Link>
               )}
             </div>
+          )}
+          {storageError && (
+            <p className="mt-3 text-sm text-yellow-700 dark:text-yellow-300">
+              {storageError}
+            </p>
           )}
         </div>
 

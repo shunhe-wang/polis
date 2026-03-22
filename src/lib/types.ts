@@ -213,6 +213,7 @@ export interface Race {
   id: string;
   name: string; // e.g. "US Senate", "Governor", "City Council District 5"
   level: 'federal' | 'state' | 'local';
+  contestType?: string;
   candidates: Candidate[];
 }
 
@@ -229,9 +230,18 @@ export interface BallotMeasure {
   type: 'referendum' | 'initiative' | 'amendment' | 'other';
 }
 
+export interface BallotElectionContext {
+  id: string;
+  name: string;
+  electionDay: string;
+  kind: 'primary' | 'general' | 'special' | 'other';
+  selectedParty: string | null;
+}
+
 export interface BallotInput {
   address: string;
   state: string;
+  election: BallotElectionContext | null;
   races: Race[];
   measures: BallotMeasure[];
 }

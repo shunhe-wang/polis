@@ -111,10 +111,30 @@ export function isValidRace(value: unknown): value is Race {
     value.id.trim().length > 0 &&
     isString(value.name) &&
     value.name.trim().length > 0 &&
+    (value.contestType === undefined || isString(value.contestType)) &&
     (value.level === "federal" ||
       value.level === "state" ||
       value.level === "local") &&
     value.candidates.every(isValidCandidate)
+  );
+}
+
+function isValidElectionContext(value: unknown): boolean {
+  if (value === null) return true;
+  if (!isRecord(value)) return false;
+
+  return (
+    isString(value.id) &&
+    value.id.trim().length > 0 &&
+    isString(value.name) &&
+    value.name.trim().length > 0 &&
+    isString(value.electionDay) &&
+    value.electionDay.trim().length > 0 &&
+    (value.kind === "primary" ||
+      value.kind === "general" ||
+      value.kind === "special" ||
+      value.kind === "other") &&
+    isNullableString(value.selectedParty)
   );
 }
 
@@ -166,6 +186,7 @@ export function isValidBallotInput(value: unknown): value is BallotInput {
   return (
     isString(value.address) &&
     isString(value.state) &&
+    isValidElectionContext(value.election ?? null) &&
     value.races.every(isValidRace) &&
     value.measures.every(isBallotMeasure)
   );

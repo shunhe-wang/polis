@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Race, BallotMeasure } from "@/lib/types";
+import type { Race, BallotMeasure, BallotElectionContext } from "@/lib/types";
+
+const CIVIC_FETCH_TIMEOUT_MS = 15_000;
 
 interface CivicCandidate {
   name: string;
@@ -17,6 +19,8 @@ interface CivicContest {
 }
 
 interface CivicResponse {
+  election?: CivicElection;
+  otherElections?: CivicElection[];
   normalizedInput?: {
     line1: string;
     city: string;
@@ -27,6 +31,12 @@ interface CivicResponse {
   error?: { message: string };
 }
 
+interface CivicElection {
+  id: string;
+  name: string;
+  electionDay: string;
+}
+
 export function mapLevel(levels: string[] | undefined): Race["level"] {
   if (!levels || levels.length === 0) return "local";
   const level = levels[0];
@@ -35,24 +45,40 @@ export function mapLevel(levels: string[] | undefined): Race["level"] {
   return "local";
 }
 
-let candidateIdCounter = 0;
 function nextCandidateId(): string {
-  candidateIdCounter++;
-  return `candidate-${candidateIdCounter}`;
+  return crypto.randomUUID();
 }
 
-let raceIdCounter = 0;
 function nextRaceId(): string {
-  raceIdCounter++;
-  return `race-${raceIdCounter}`;
+  return crypto.randomUUID();
 }
 
 interface ElectionsResponse {
-  elections?: Array<{ id: string; name: string; electionDay: string }>;
+  elections?: CivicElection[];
+}
+
+interface CivicLookupResult {
+  state: string | null;
+  election: BallotElectionContext | null;
+  availableElections: BallotElectionContext[];
+  requiresElectionSelection: boolean;
+  primaryParties: string[];
+  races: Race[];
+  measures: BallotMeasure[];
+  error: string | null;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CIVIC_FETCH_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+
   const data = (await response.json()) as T;
 
   if (
@@ -82,8 +108,87 @@ export function isRaceContest(contest: CivicContest): boolean {
     (Boolean(contest.office) || (contest.candidates?.length ?? 0) > 0);
 }
 
+function inferElectionKind(name: string): BallotElectionContext["kind"] {
+  const lower = name.toLowerCase();
+  if (lower.includes("primary")) return "primary";
+  if (lower.includes("general")) return "general";
+  if (lower.includes("special")) return "special";
+  return "other";
+}
+
+function toElectionContext(
+  election: CivicElection | null | undefined
+): BallotElectionContext | null {
+  if (!election) return null;
+
+  return {
+    id: election.id,
+    name: election.name,
+    electionDay: election.electionDay,
+    kind: inferElectionKind(election.name),
+    selectedParty: null,
+  };
+}
+
+function dedupeElections(
+  elections: Array<CivicElection | null | undefined>
+): BallotElectionContext[] {
+  const seen = new Set<string>();
+  const contexts: BallotElectionContext[] = [];
+
+  for (const election of elections) {
+    const context = toElectionContext(election);
+    if (!context || seen.has(context.id)) continue;
+    seen.add(context.id);
+    contexts.push(context);
+  }
+
+  return contexts;
+}
+
+function extractPrimaryParties(races: Race[]): string[] {
+  const parties = new Set<string>();
+
+  for (const race of races) {
+    if (!race.contestType?.toLowerCase().includes("primary")) continue;
+    for (const candidate of race.candidates) {
+      if (candidate.party) {
+        parties.add(candidate.party);
+      }
+    }
+  }
+
+  return Array.from(parties).sort((a, b) => a.localeCompare(b));
+}
+
+async function findMatchingElections(
+  resolvedAddress: string,
+  apiKey: string,
+  elections: CivicElection[]
+): Promise<Array<{ election: CivicElection; data: CivicResponse }>> {
+  const matches: Array<{ election: CivicElection; data: CivicResponse }> = [];
+
+  for (const election of elections) {
+    const elUrl = new URL(
+      "https://www.googleapis.com/civicinfo/v2/voterinfo"
+    );
+    elUrl.searchParams.set("key", apiKey);
+    elUrl.searchParams.set("address", resolvedAddress);
+    elUrl.searchParams.set("electionId", election.id);
+
+    const elData = await fetchJson<CivicResponse>(elUrl.toString());
+
+    if (!elData.error && (elData.contests?.length ?? 0) > 0) {
+      matches.push({ election, data: elData });
+    }
+  }
+
+  return matches;
+}
+
 export async function GET(request: NextRequest) {
   const address = request.nextUrl.searchParams.get("address");
+  const electionId = request.nextUrl.searchParams.get("electionId");
 
   if (!address || address.trim().length === 0) {
     return NextResponse.json(
@@ -123,20 +228,50 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // First try without electionId (works when there's an obvious upcoming election)
-    const url = new URL(
-      "https://www.googleapis.com/civicinfo/v2/voterinfo"
-    );
+    if (electionId) {
+      const selectedUrl = new URL(
+        "https://www.googleapis.com/civicinfo/v2/voterinfo"
+      );
+      selectedUrl.searchParams.set("key", apiKey);
+      selectedUrl.searchParams.set("address", resolvedAddress);
+      selectedUrl.searchParams.set("electionId", electionId);
+
+      const selectedData = await fetchJson<CivicResponse>(selectedUrl.toString());
+      if (!selectedData.error && (selectedData.contests?.length ?? 0) > 0) {
+        return NextResponse.json(buildResult(selectedData));
+      }
+    }
+
+    // First try without electionId.
+    const url = new URL("https://www.googleapis.com/civicinfo/v2/voterinfo");
     url.searchParams.set("key", apiKey);
     url.searchParams.set("address", resolvedAddress);
 
     const data = await fetchJson<CivicResponse>(url.toString());
 
     if (!data.error) {
+      const availableElections = dedupeElections([
+        data.election,
+        ...(data.otherElections ?? []),
+      ]);
+
+      if (availableElections.length > 1) {
+        return NextResponse.json({
+          state: data.normalizedInput?.state ?? null,
+          election: null,
+          availableElections,
+          requiresElectionSelection: true,
+          primaryParties: [],
+          races: [],
+          measures: [],
+          error: null,
+        } satisfies CivicLookupResult);
+      }
+
       return NextResponse.json(buildResult(data));
     }
 
-    // If "Election unknown", fetch available elections and try each
+    // If "Election unknown", fetch available elections and test which ones match this address.
     if (data.error.message === "Election unknown") {
       const electionsUrl = new URL(
         "https://www.googleapis.com/civicinfo/v2/elections"
@@ -150,19 +285,31 @@ export async function GET(request: NextRequest) {
         (e) => e.id !== "2000" // Skip the VIP test election
       );
 
-      for (const election of elections) {
-        const elUrl = new URL(
-          "https://www.googleapis.com/civicinfo/v2/voterinfo"
+      const matches = await findMatchingElections(
+        resolvedAddress,
+        apiKey,
+        elections
+      );
+
+      if (matches.length > 1) {
+        return NextResponse.json({
+          state: data.normalizedInput?.state ?? null,
+          election: null,
+          availableElections: matches
+            .map((match) => toElectionContext(match.election))
+            .filter((value): value is BallotElectionContext => value !== null),
+          requiresElectionSelection: true,
+          primaryParties: [],
+          races: [],
+          measures: [],
+          error: null,
+        } satisfies CivicLookupResult);
+      }
+
+      if (matches.length === 1) {
+        return NextResponse.json(
+          buildResultWithElection(matches[0].data, matches[0].election)
         );
-        elUrl.searchParams.set("key", apiKey);
-        elUrl.searchParams.set("address", resolvedAddress);
-        elUrl.searchParams.set("electionId", election.id);
-
-        const elData = await fetchJson<CivicResponse>(elUrl.toString());
-
-        if (!elData.error && elData.contests && elData.contests.length > 0) {
-          return NextResponse.json(buildResult(elData));
-        }
       }
     }
 
@@ -171,23 +318,41 @@ export async function GET(request: NextRequest) {
       error:
         "No upcoming elections found for this address. You can add races and candidates manually below.",
       state: null,
+      election: null,
+      availableElections: [],
+      requiresElectionSelection: false,
+      primaryParties: [],
       races: [],
       measures: [],
-    });
+    } satisfies CivicLookupResult);
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : "Failed to fetch civic data";
+      err instanceof Error && err.name === "AbortError"
+        ? "Ballot lookup timed out. Google Civic took too long to respond."
+        : err instanceof Error
+          ? err.message
+          : "Failed to fetch civic data";
     return NextResponse.json(
-      { error: message, state: null, races: [], measures: [] },
-      { status: 502 }
+      {
+        error: message,
+        state: null,
+        election: null,
+        availableElections: [],
+        requiresElectionSelection: false,
+        primaryParties: [],
+        races: [],
+        measures: [],
+      } satisfies CivicLookupResult,
+      {
+        status:
+          err instanceof Error && err.name === "AbortError" ? 504 : 502,
+      }
     );
   }
 }
 
-let measureIdCounter = 0;
 function nextMeasureId(): string {
-  measureIdCounter++;
-  return `measure-${measureIdCounter}`;
+  return crypto.randomUUID();
 }
 
 export function inferMeasureType(
@@ -206,11 +371,23 @@ export function inferMeasureType(
 
 export function buildResult(data: CivicResponse): {
   state: string | null;
+  election: BallotElectionContext | null;
+  availableElections: BallotElectionContext[];
+  requiresElectionSelection: boolean;
+  primaryParties: string[];
   races: Race[];
   measures: BallotMeasure[];
   error: string | null;
 } {
+  return buildResultWithElection(data, data.election);
+}
+
+export function buildResultWithElection(
+  data: CivicResponse,
+  electionOverride?: CivicElection | null
+): CivicLookupResult {
   const state = data.normalizedInput?.state ?? null;
+  const election = toElectionContext(electionOverride ?? data.election);
 
   const races: Race[] = (data.contests ?? [])
     .filter(isRaceContest)
@@ -218,6 +395,7 @@ export function buildResult(data: CivicResponse): {
       id: nextRaceId(),
       name: contest.office ?? contest.ballotTitle ?? "Unknown Race",
       level: mapLevel(contest.level),
+      contestType: contest.type,
       candidates: (contest.candidates ?? []).map((c) => ({
         id: nextCandidateId(),
         name: c.name,
@@ -234,5 +412,14 @@ export function buildResult(data: CivicResponse): {
       type: inferMeasureType(contest),
     }));
 
-  return { state, races, measures, error: null };
+  return {
+    state,
+    election,
+    availableElections: election ? [election] : [],
+    requiresElectionSelection: false,
+    primaryParties: extractPrimaryParties(races),
+    races,
+    measures,
+    error: null,
+  };
 }

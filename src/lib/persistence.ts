@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
 import {
   createEmptyValuesProfile,
   hydrateValuesProfile,
@@ -82,7 +83,7 @@ export async function saveBallotInput(
   );
 
   if (!error) {
-    sessionStorage.setItem("ballotInput", JSON.stringify(ballot));
+    safeSessionStorageSet("ballotInput", JSON.stringify(ballot));
   }
 
   return !error;
@@ -124,16 +125,16 @@ export async function syncFromSupabase(): Promise<{
   ]);
 
   if (profile) {
-    const existing = sessionStorage.getItem("valuesProfile");
+    const existing = safeSessionStorageGet("valuesProfile");
     if (!existing) {
-      sessionStorage.setItem("valuesProfile", JSON.stringify(profile));
+      safeSessionStorageSet("valuesProfile", JSON.stringify(profile));
     }
   }
 
   if (ballot) {
-    const existing = sessionStorage.getItem("ballotInput");
+    const existing = safeSessionStorageGet("ballotInput");
     if (!existing) {
-      sessionStorage.setItem("ballotInput", JSON.stringify(ballot));
+      safeSessionStorageSet("ballotInput", JSON.stringify(ballot));
     }
   }
 
@@ -144,8 +145,8 @@ export async function syncFromSupabase(): Promise<{
  * Save current sessionStorage data to Supabase for the logged-in user.
  */
 export async function syncToSupabase(): Promise<void> {
-  const profileStr = sessionStorage.getItem("valuesProfile");
-  const ballotStr = sessionStorage.getItem("ballotInput");
+  const profileStr = safeSessionStorageGet("valuesProfile");
+  const ballotStr = safeSessionStorageGet("ballotInput");
 
   await Promise.all([
     profileStr

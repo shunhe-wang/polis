@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
 import type {
   ValuesProfile,
   BallotInput,
@@ -81,7 +82,7 @@ function getCachedResults(
 ): CachedData | null {
   try {
     const key = buildCacheKey(valuesProfile, ballotInput);
-    const cached = sessionStorage.getItem(key);
+    const cached = safeSessionStorageGet(key);
     if (!cached) return null;
     const parsed = JSON.parse(cached) as unknown;
 
@@ -121,7 +122,7 @@ function setCachedResults(
 ): void {
   try {
     const key = buildCacheKey(valuesProfile, ballotInput);
-    sessionStorage.setItem(key, JSON.stringify(data));
+    safeSessionStorageSet(key, JSON.stringify(data));
   } catch {
     // sessionStorage may be full — ignore
   }

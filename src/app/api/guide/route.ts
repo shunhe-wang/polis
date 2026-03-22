@@ -151,8 +151,17 @@ export async function GET(request: NextRequest) {
       !Array.isArray(data.ballot_input) &&
       "state" in data.ballot_input &&
       typeof data.ballot_input.state === "string"
-        ? { state: data.ballot_input.state }
-        : { state: "" };
+        ? {
+            state: data.ballot_input.state,
+            election:
+              "election" in data.ballot_input &&
+              data.ballot_input.election &&
+              typeof data.ballot_input.election === "object" &&
+              !Array.isArray(data.ballot_input.election)
+                ? data.ballot_input.election
+                : null,
+          }
+        : { state: "", election: null };
 
     const isOwner = user?.id === data.user_id;
 
@@ -166,7 +175,7 @@ export async function GET(request: NextRequest) {
         : [],
       measure_results: Array.isArray(data.measure_results)
         ? data.measure_results.map(sanitizeMeasureResult)
-        : data.measure_results,
+        : [],
       ...(isOwner ? { can_edit: true } : {}),
     });
   }

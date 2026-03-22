@@ -26,6 +26,13 @@ const valuesProfile = {
 const ballotInput = {
   address: "123 Main St",
   state: "VA",
+  election: {
+    id: "election-1",
+    name: "Virginia Democratic Primary",
+    electionDay: "2026-06-10",
+    kind: "primary",
+    selectedParty: "Democrat",
+  },
   races: [
     {
       id: "race-1",

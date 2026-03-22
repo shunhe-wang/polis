@@ -36,6 +36,7 @@ describe("validation", () => {
     const ballot: BallotInput = {
       address: "123 Main St",
       state: "CA",
+      election: null,
       races: [
         {
           id: "race-1",

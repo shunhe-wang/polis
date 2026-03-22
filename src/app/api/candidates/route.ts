@@ -143,8 +143,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       clearTimeout(timeout);
     }
   } catch (err) {
-    const isAbort =
-      err instanceof DOMException && err.name === "AbortError";
+    const isAbort = err instanceof Error && err.name === "AbortError";
     const isQuotaConfigError =
       err instanceof Error &&
       err.message.includes("AI quota functions are not installed");

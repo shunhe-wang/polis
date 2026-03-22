@@ -11,7 +11,14 @@ import Link from "next/link";
 
 interface SavedGuide {
   id: string;
-  ballot_input: { state: string };
+  ballot_input: {
+    state: string;
+    election?: {
+      name: string;
+      electionDay: string;
+      selectedParty: string | null;
+    } | null;
+  };
   recommendations: RaceRecommendation[];
   measure_results?: MeasureResult[] | null;
   created_at: string;
@@ -102,6 +109,17 @@ export default function SharedGuidePage({
             {guide.ballot_input.state &&
               ` for ${guide.ballot_input.state}`}
           </p>
+          {guide.ballot_input.election && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {guide.ballot_input.election.name} on{" "}
+              {new Date(
+                guide.ballot_input.election.electionDay
+              ).toLocaleDateString()}
+              {guide.ballot_input.election.selectedParty
+                ? ` • ${guide.ballot_input.election.selectedParty} ballot`
+                : ""}
+            </p>
+          )}
         </div>
 
         {/* Race results */}

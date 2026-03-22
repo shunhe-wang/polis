@@ -120,6 +120,7 @@ export async function POST(request: NextRequest) {
   const ballotInput = {
     address: "",
     state: body.state,
+    election: null,
     races: [body.race],
     measures: [],
   };

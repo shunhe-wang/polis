@@ -10,18 +10,47 @@ import {
   hydrateValuesProfile,
   type Race,
   type BallotMeasure,
+  type BallotElectionContext,
   type ValuesProfile,
   type BallotInput,
 } from "@/lib/types";
 import { DEFAULT_ACCOUNT_SUMMARY, type AccountSummary } from "@/lib/freemium";
 import { getAccountSummary } from "@/lib/account-client";
+import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
 import { saveBallotInput, syncFromSupabase } from "@/lib/persistence";
 
 interface CivicApiResponse {
   state: string | null;
+  election: BallotElectionContext | null;
+  availableElections: BallotElectionContext[];
+  requiresElectionSelection: boolean;
+  primaryParties: string[];
   races: Race[];
   measures: BallotMeasure[];
   error: string | null;
+}
+
+function applyPrimaryPartySelection(
+  races: Race[],
+  party: string | null
+): Race[] {
+  if (!party) return races;
+
+  return races.flatMap((race) => {
+    if (!race.contestType?.toLowerCase().includes("primary")) {
+      return [race];
+    }
+
+    const filteredCandidates = race.candidates.filter(
+      (candidate) => candidate.party === party || candidate.party === null
+    );
+
+    if (filteredCandidates.length === 0) {
+      return [];
+    }
+
+    return [{ ...race, candidates: filteredCandidates }];
+  });
 }
 
 export default function BallotPage() {
@@ -31,10 +60,17 @@ export default function BallotPage() {
   );
   const [address, setAddress] = useState("");
   const [state, setState] = useState<string | null>(null);
+  const [election, setElection] = useState<BallotElectionContext | null>(null);
+  const [availableElections, setAvailableElections] = useState<
+    BallotElectionContext[]
+  >([]);
+  const [importedRaces, setImportedRaces] = useState<Race[]>([]);
+  const [primaryParties, setPrimaryParties] = useState<string[]>([]);
   const [races, setRaces] = useState<Race[]>([]);
   const [measures, setMeasures] = useState<BallotMeasure[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [returnToGuide, setReturnToGuide] = useState(false);
@@ -49,7 +85,7 @@ export default function BallotPage() {
 
       await syncFromSupabase();
 
-      const stored = sessionStorage.getItem("valuesProfile");
+      const stored = safeSessionStorageGet("valuesProfile");
       if (!stored) {
         router.push("/onboarding");
         return;
@@ -59,12 +95,14 @@ export default function BallotPage() {
         hydrateValuesProfile(JSON.parse(stored) as Partial<ValuesProfile>)
       );
 
-      const ballotStr = sessionStorage.getItem("ballotInput");
+      const ballotStr = safeSessionStorageGet("ballotInput");
       if (ballotStr) {
         const ballot = JSON.parse(ballotStr) as BallotInput;
         setAddress(ballot.address);
         setState(ballot.state || null);
+        setElection(ballot.election ?? null);
         setRaces(ballot.races ?? []);
+        setImportedRaces(ballot.races ?? []);
         setMeasures(ballot.measures ?? []);
         setHasSearched(true);
       }
@@ -83,29 +121,42 @@ export default function BallotPage() {
     const ballotInput: BallotInput = {
       address,
       state: state ?? "",
+      election,
       races,
       measures,
     };
 
-    sessionStorage.setItem("ballotInput", JSON.stringify(ballotInput));
+    const saved = safeSessionStorageSet(
+      "ballotInput",
+      JSON.stringify(ballotInput)
+    );
+    setStorageError(
+      saved
+        ? null
+        : "Could not save this ballot in browser storage. Keep this tab open or sign in so your progress can sync."
+    );
 
     const timeout = window.setTimeout(() => {
       void saveBallotInput(ballotInput);
     }, 400);
 
     return () => window.clearTimeout(timeout);
-  }, [address, state, races, measures, hasHydrated]);
+  }, [address, state, election, races, measures, hasHydrated]);
 
-  const handleLookup = async (addr: string) => {
+  const handleLookup = async (addr: string, selectedElectionId?: string) => {
     setAddress(addr);
     setIsLoading(true);
     setLookupError(null);
     setHasSearched(true);
 
     try {
-      const res = await fetch(
-        `/api/civic?address=${encodeURIComponent(addr)}`
-      );
+      const params = new URLSearchParams({
+        address: addr,
+      });
+      if (selectedElectionId) {
+        params.set("electionId", selectedElectionId);
+      }
+      const res = await fetch(`/api/civic?${params.toString()}`);
       const data: CivicApiResponse = await res.json();
 
       if (!res.ok) {
@@ -113,6 +164,10 @@ export default function BallotPage() {
           data.error || "Ballot lookup is temporarily unavailable."
         );
         setState(null);
+        setElection(null);
+        setAvailableElections([]);
+        setPrimaryParties([]);
+        setImportedRaces([]);
         setRaces([]);
         setMeasures([]);
         return;
@@ -123,7 +178,20 @@ export default function BallotPage() {
       }
 
       setState(data.state);
-      setRaces(data.races);
+      setAvailableElections(data.availableElections ?? []);
+      if (data.requiresElectionSelection) {
+        setElection(null);
+        setPrimaryParties([]);
+        setImportedRaces([]);
+        setRaces([]);
+        setMeasures([]);
+        return;
+      }
+
+      setElection(data.election);
+      setPrimaryParties(data.primaryParties ?? []);
+      setImportedRaces(data.races);
+      setRaces(applyPrimaryPartySelection(data.races, data.election?.selectedParty ?? null));
       setMeasures(data.measures ?? []);
     } catch {
       setLookupError(
@@ -144,11 +212,20 @@ export default function BallotPage() {
     const ballotInput: BallotInput = {
       address,
       state: state ?? "",
+      election,
       races,
       measures,
     };
 
-    sessionStorage.setItem("ballotInput", JSON.stringify(ballotInput));
+    const saved = safeSessionStorageSet(
+      "ballotInput",
+      JSON.stringify(ballotInput)
+    );
+    if (!saved) {
+      setStorageError(
+        "Could not save this ballot in browser storage. Keep this tab open or sign in so your progress can sync."
+      );
+    }
     void saveBallotInput(ballotInput);
     if (account.tier === "guest") {
       router.push("/start?intent=guide");
@@ -173,6 +250,12 @@ export default function BallotPage() {
             Enter your address to find races and candidates, or add them
             manually.
           </p>
+          {election && (
+            <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              {election.name} • {new Date(election.electionDay).toLocaleDateString()}
+              {election.selectedParty ? ` • ${election.selectedParty} ballot` : ""}
+            </p>
+          )}
         </div>
 
         {returnToGuide && (
@@ -225,10 +308,82 @@ export default function BallotPage() {
               </div>
             )}
 
+            {storageError && (
+              <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+                <p className="font-medium">Storage note</p>
+                <p className="mt-1">{storageError}</p>
+              </div>
+            )}
+
             {state && (
               <p className="mb-4 text-sm text-muted-foreground">
                 Showing results for <span className="font-medium">{state}</span>
               </p>
+            )}
+
+            {availableElections.length > 1 && !election && (
+              <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <p className="text-sm font-medium">Choose an election</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  We found multiple elections for this address. Pick the one you want before we load the ballot.
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {availableElections.map((option) => (
+                    <Button
+                      key={option.id}
+                      variant="outline"
+                      className="justify-between"
+                      onClick={() => handleLookup(address, option.id)}
+                    >
+                      <span>{option.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(option.electionDay).toLocaleDateString()}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {election && primaryParties.length > 1 && (
+              <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <p className="text-sm font-medium">Choose your primary ballot</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  We imported candidates for multiple parties. Pick the ballot you want to evaluate.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant={election.selectedParty === null ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setElection((current) =>
+                        current ? { ...current, selectedParty: null } : current
+                      );
+                      setRaces(importedRaces);
+                    }}
+                  >
+                    Show All
+                  </Button>
+                  {primaryParties.map((party) => (
+                    <Button
+                      key={party}
+                      variant={election.selectedParty === party ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setElection((current) =>
+                          current ? { ...current, selectedParty: party } : current
+                        );
+                        setRaces(applyPrimaryPartySelection(importedRaces, party));
+                      }}
+                    >
+                      {party}
+                    </Button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Switching ballot party resets imported primary candidates for this lookup.
+                </p>
+              </div>
             )}
 
             <RaceEditor races={races} onRacesChange={setRaces} state={state} />

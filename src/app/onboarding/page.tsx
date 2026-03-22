@@ -16,6 +16,7 @@ import {
   type ValuesProfile,
   createEmptyValuesProfile,
 } from "@/lib/types";
+import { safeSessionStorageSet } from "@/lib/browser-storage";
 import { saveValuesProfile } from "@/lib/persistence";
 
 const STEP_LABELS = [
@@ -29,6 +30,7 @@ const TOTAL_STEPS = STEP_LABELS.length;
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ValuesProfile>(
     createEmptyValuesProfile
   );
@@ -85,7 +87,16 @@ export default function OnboardingPage() {
       setStep(step + 1);
     } else {
       // Save profile to sessionStorage and navigate to ballot input
-      sessionStorage.setItem("valuesProfile", JSON.stringify(profile));
+      const saved = safeSessionStorageSet(
+        "valuesProfile",
+        JSON.stringify(profile)
+      );
+      if (!saved) {
+        setStorageError(
+          "Could not save your profile in this browser. Free up browser storage and try again."
+        );
+        return;
+      }
       // Also persist to Supabase for logged-in users (fire-and-forget)
       saveValuesProfile(profile);
       router.push("/ballot");
@@ -122,6 +133,11 @@ export default function OnboardingPage() {
         {/* Step content */}
         <Card className="mt-6">
           <CardContent className="pt-6">
+            {storageError && (
+              <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+                {storageError}
+              </div>
+            )}
             {step === 0 && (
               <IssueRater
                 ratings={profile.issueRatings}

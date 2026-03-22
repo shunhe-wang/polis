@@ -98,6 +98,7 @@ describe("persistence", () => {
     const ballot: BallotInput = {
       address: "123 Main St",
       state: "CA",
+      election: null,
       races: [],
       measures: [],
     };
@@ -136,6 +137,7 @@ describe("persistence", () => {
         ballot: {
           address: "123 Main St",
           state: "CA",
+          election: null,
           races: [],
           measures: [],
         },
