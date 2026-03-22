@@ -19,7 +19,12 @@ import {
 } from "@/lib/types";
 import { DEFAULT_ACCOUNT_SUMMARY, type AccountSummary } from "@/lib/freemium";
 import { getAccountSummary } from "@/lib/account-client";
-import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
+import {
+  safeLocalStorageGet,
+  safeLocalStorageSet,
+  safeSessionStorageGet,
+  safeSessionStorageSet,
+} from "@/lib/browser-storage";
 import { saveBallotInput, syncFromSupabase } from "@/lib/persistence";
 
 interface CivicApiResponse {
@@ -55,6 +60,18 @@ function applyPrimaryPartySelection(
 
     return [{ ...race, candidates: filteredCandidates }];
   });
+}
+
+function saveBrowserBallot(key: string, value: string): boolean {
+  const savedInSession = safeSessionStorageSet(key, value);
+  const savedInLocal = safeLocalStorageSet(key, value);
+  return savedInSession || savedInLocal;
+}
+
+function getImportConfidenceLabel(confidence: number): string {
+  if (confidence >= 80) return "High";
+  if (confidence >= 50) return "Medium";
+  return "Low";
 }
 
 export default function BallotPage() {
@@ -95,18 +112,25 @@ export default function BallotPage() {
 
       await syncFromSupabase();
 
-      const stored = safeSessionStorageGet("valuesProfile");
+      const stored =
+        safeSessionStorageGet("valuesProfile") ??
+        safeLocalStorageGet("valuesProfile");
       if (!stored) {
         router.push("/onboarding");
         return;
       }
 
+      safeSessionStorageSet("valuesProfile", stored);
+
       setValuesProfile(
         hydrateValuesProfile(JSON.parse(stored) as Partial<ValuesProfile>)
       );
 
-      const ballotStr = safeSessionStorageGet("ballotInput");
+      const ballotStr =
+        safeSessionStorageGet("ballotInput") ??
+        safeLocalStorageGet("ballotInput");
       if (ballotStr) {
+        safeSessionStorageSet("ballotInput", ballotStr);
         const ballot = JSON.parse(ballotStr) as BallotInput;
         setAddress(ballot.address);
         setState(ballot.state || null);
@@ -161,15 +185,7 @@ export default function BallotPage() {
       measures,
     };
 
-    const saved = safeSessionStorageSet(
-      "ballotInput",
-      JSON.stringify(ballotInput)
-    );
-    setStorageError(
-      saved
-        ? null
-        : "Could not save this ballot in browser storage. Keep this tab open or sign in so your progress can sync."
-    );
+    saveBrowserBallot("ballotInput", JSON.stringify(ballotInput));
 
     const timeout = window.setTimeout(() => {
       void saveBallotInput(ballotInput);
@@ -256,14 +272,13 @@ export default function BallotPage() {
       measures,
     };
 
-    const saved = safeSessionStorageSet(
-      "ballotInput",
-      JSON.stringify(ballotInput)
-    );
+    const saved = saveBrowserBallot("ballotInput", JSON.stringify(ballotInput));
     if (!saved) {
       setStorageError(
         "Could not save this ballot in browser storage. Keep this tab open or sign in so your progress can sync."
       );
+    } else {
+      setStorageError(null);
     }
     void saveBallotInput(ballotInput);
     if (account.tier === "guest") {
@@ -558,7 +573,7 @@ export default function BallotPage() {
                     Source: {importMeta.source.replace("_", " ")}
                   </span>
                   <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
-                    Confidence: {importMeta.confidence}/100
+                    Import confidence: {getImportConfidenceLabel(importMeta.confidence)} ({importMeta.confidence}/100)
                   </span>
                   {importMeta.importId && (
                     <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
@@ -570,6 +585,11 @@ export default function BallotPage() {
                   <p className="mt-3 text-xs text-muted-foreground">
                     Use the official source above to verify missing races or
                     measures, then finish editing below.
+                  </p>
+                )}
+                {importMeta.status === "unavailable" && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    This score describes how complete the imported ballot looks, not how confident Polis is about any recommendation.
                   </p>
                 )}
               </div>
@@ -640,7 +660,13 @@ export default function BallotPage() {
               </div>
             )}
 
-            <RaceEditor races={races} onRacesChange={setRaces} state={state} />
+            <RaceEditor
+              races={races}
+              onRacesChange={setRaces}
+              state={state}
+              userTier={account.tier}
+              canLookupCandidates={account.tier === "pro" && account.trustedAccount}
+            />
 
             {/* Ballot Measures */}
             {measures.length > 0 && (
@@ -693,7 +719,10 @@ export default function BallotPage() {
         {/* Continue */}
         <div className="mt-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => router.push("/onboarding")}>
+            <Button
+              variant="ghost"
+              onClick={() => router.push("/onboarding?step=4")}
+            >
               Back
             </Button>
             {returnToGuide && (

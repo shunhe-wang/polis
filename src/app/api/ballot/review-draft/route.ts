@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getAccountTrustStatus } from "@/lib/account-trust";
 import {
   enforceQuotaRules,
@@ -158,10 +157,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const admin = createAdminClient();
   try {
     const quotaFailure = await enforceQuotaRules(
-      admin ?? supabase,
+      supabase,
       [
         ...getBallotParseQuotaRules().map((rule) => ({
           rule,

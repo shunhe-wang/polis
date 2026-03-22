@@ -6,8 +6,9 @@ import {
   getCandidateLookupQuotaRules,
 } from "@/lib/ai-quotas";
 import { getAccountTrustStatus } from "@/lib/account-trust";
+import { getAccountPlan, getCurrentEntitlements } from "@/lib/billing";
+import { canAccessFeature } from "@/lib/freemium";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
-import { createAdminClient } from "@/lib/supabase/admin";
 
 const anthropic = new Anthropic();
 
@@ -48,6 +49,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const entitlements = await getCurrentEntitlements(supabase, user.id);
+  const tier = getAccountPlan(user, entitlements).tier;
+  if (!canAccessFeature(tier, "research")) {
+    return NextResponse.json(
+      {
+        error:
+          "Automatic candidate lookup is a paid feature. Free users can still add candidates manually.",
+        candidates: [],
+      },
+      { status: 403 }
+    );
+  }
+
   const body = await request.json().catch(() => null);
 
   if (
@@ -76,7 +90,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       quotaRules.map((rule) => ({ rule, incrementBy: 1 }))
     );
     const ipQuotaFailure = await enforceQuotaRules(
-      createAdminClient() ?? supabase,
+      supabase,
       buildScopedIpQuotaRules(request, quotaRules)
     );
 

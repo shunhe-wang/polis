@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,9 +15,15 @@ import {
   type PoliticalIdentity,
   type ValuesProfile,
   createEmptyValuesProfile,
+  hydrateValuesProfile,
 } from "@/lib/types";
-import { safeSessionStorageSet } from "@/lib/browser-storage";
-import { saveValuesProfile } from "@/lib/persistence";
+import {
+  safeLocalStorageGet,
+  safeLocalStorageSet,
+  safeSessionStorageGet,
+  safeSessionStorageSet,
+} from "@/lib/browser-storage";
+import { saveValuesProfile, syncFromSupabase } from "@/lib/persistence";
 
 const STEP_LABELS = [
   "Rate Issues",
@@ -26,14 +32,66 @@ const STEP_LABELS = [
   "Identity",
 ];
 const TOTAL_STEPS = STEP_LABELS.length;
+const ONBOARDING_STEP_KEY = "onboardingStep";
+
+function clampStep(step: number): number {
+  if (!Number.isFinite(step)) return 0;
+  return Math.min(TOTAL_STEPS - 1, Math.max(0, Math.floor(step)));
+}
+
+function saveBrowserDraft(key: string, value: string): boolean {
+  const savedInSession = safeSessionStorageSet(key, value);
+  const savedInLocal = safeLocalStorageSet(key, value);
+  return savedInSession || savedInLocal;
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [hasHydrated, setHasHydrated] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ValuesProfile>(
     createEmptyValuesProfile
   );
+
+  useEffect(() => {
+    async function hydrateDraft() {
+      await syncFromSupabase();
+
+      const params = new URLSearchParams(window.location.search);
+      const storedProfile =
+        safeSessionStorageGet("valuesProfile") ??
+        safeLocalStorageGet("valuesProfile");
+      if (storedProfile) {
+        setProfile(
+          hydrateValuesProfile(JSON.parse(storedProfile) as Partial<ValuesProfile>)
+        );
+        safeSessionStorageSet("valuesProfile", storedProfile);
+      }
+
+      const queryStep = params.get("step");
+      const storedStep =
+        queryStep ??
+        safeSessionStorageGet(ONBOARDING_STEP_KEY) ??
+        safeLocalStorageGet(ONBOARDING_STEP_KEY);
+
+      if (storedStep) {
+        const parsedStep = Number.parseInt(storedStep, 10);
+        setStep(clampStep(queryStep ? parsedStep - 1 : parsedStep));
+      }
+      setHasHydrated(true);
+    }
+
+    void hydrateDraft();
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    const serializedProfile = JSON.stringify(profile);
+    saveBrowserDraft("valuesProfile", serializedProfile);
+    saveBrowserDraft(ONBOARDING_STEP_KEY, String(step));
+  }, [hasHydrated, profile, step]);
 
   const handleRatingChange = useCallback((issue: Issue, value: number) => {
     setProfile((prev) => ({
@@ -84,19 +142,16 @@ export default function OnboardingPage() {
 
   const handleNext = () => {
     if (step < TOTAL_STEPS - 1) {
-      setStep(step + 1);
+      setStep((currentStep) => currentStep + 1);
     } else {
-      // Save profile to sessionStorage and navigate to ballot input
-      const saved = safeSessionStorageSet(
-        "valuesProfile",
-        JSON.stringify(profile)
-      );
+      const saved = saveBrowserDraft("valuesProfile", JSON.stringify(profile));
       if (!saved) {
         setStorageError(
           "Could not save your profile in this browser. Free up browser storage and try again."
         );
         return;
       }
+      setStorageError(null);
       // Also persist to Supabase for logged-in users (fire-and-forget)
       saveValuesProfile(profile);
       router.push("/ballot");
@@ -105,7 +160,7 @@ export default function OnboardingPage() {
 
   const handleBack = () => {
     if (step > 0) {
-      setStep(step - 1);
+      setStep((currentStep) => currentStep - 1);
     }
   };
 

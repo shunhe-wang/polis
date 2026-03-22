@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/supabase/client";
-import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
+import {
+  safeLocalStorageGet,
+  safeLocalStorageSet,
+  safeSessionStorageGet,
+  safeSessionStorageSet,
+} from "@/lib/browser-storage";
 import {
   createEmptyValuesProfile,
   hydrateValuesProfile,
@@ -84,6 +89,7 @@ export async function saveBallotInput(
 
   if (!error) {
     safeSessionStorageSet("ballotInput", JSON.stringify(ballot));
+    safeLocalStorageSet("ballotInput", JSON.stringify(ballot));
   }
 
   return !error;
@@ -129,12 +135,20 @@ export async function syncFromSupabase(): Promise<{
     if (!existing) {
       safeSessionStorageSet("valuesProfile", JSON.stringify(profile));
     }
+    const localExisting = safeLocalStorageGet("valuesProfile");
+    if (!localExisting) {
+      safeLocalStorageSet("valuesProfile", JSON.stringify(profile));
+    }
   }
 
   if (ballot) {
     const existing = safeSessionStorageGet("ballotInput");
     if (!existing) {
       safeSessionStorageSet("ballotInput", JSON.stringify(ballot));
+    }
+    const localExisting = safeLocalStorageGet("ballotInput");
+    if (!localExisting) {
+      safeLocalStorageSet("ballotInput", JSON.stringify(ballot));
     }
   }
 

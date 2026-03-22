@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
   if (tier === "free") {
     try {
       const ipQuotaFailure = await enforceQuotaRules(
-        createAdminClient() ?? supabase,
+        supabase,
         buildScopedIpQuotaRules(request, getStarterAnalysisIpQuotaRules())
       );
       if (ipQuotaFailure) {

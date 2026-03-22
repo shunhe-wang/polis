@@ -6,12 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import type { UserTier } from "@/lib/freemium";
 import type { Race, Candidate } from "@/lib/types";
 
 interface RaceEditorProps {
   races: Race[];
   onRacesChange: (races: Race[]) => void;
   state?: string | null;
+  userTier: UserTier;
+  canLookupCandidates: boolean;
 }
 
 let idCounter = 1000;
@@ -84,7 +87,44 @@ const RACE_TEMPLATES: RaceTemplate[] = [
   },
 ];
 
-export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
+function getRaceLookupRequirement(
+  raceName: string,
+  state: string | null | undefined
+): string | null {
+  if (!state) {
+    return "Add your address first so Polis knows which state and ballot context to search.";
+  }
+
+  const lower = raceName.toLowerCase();
+  const hasQualifier =
+    raceName.includes(" - ") ||
+    /\bdistrict\b|\bward\b|\bprecinct\b|\bcounty\b|\bcity\b|\btown\b|\bborough\b/i.test(
+      raceName
+    );
+
+  if (
+    lower.includes("us house") ||
+    lower.includes("state senate") ||
+    lower.includes("state house") ||
+    lower.includes("city council") ||
+    lower.includes("school board") ||
+    lower.includes("mayor")
+  ) {
+    return hasQualifier
+      ? null
+      : "Add the district, city, or locality before looking up candidates for this race.";
+  }
+
+  return null;
+}
+
+export function RaceEditor({
+  races,
+  onRacesChange,
+  state,
+  userTier,
+  canLookupCandidates,
+}: RaceEditorProps) {
   const [showAddRace, setShowAddRace] = useState(false);
   const [newRaceName, setNewRaceName] = useState("");
   const [lookingUp, setLookingUp] = useState<string | null>(null);
@@ -99,6 +139,21 @@ export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
   racesRef.current = races;
 
   const lookUpCandidates = async (raceId: string, raceName: string) => {
+    const requirement = getRaceLookupRequirement(raceName, state);
+    if (requirement) {
+      setLookupMessage(requirement);
+      return;
+    }
+
+    if (!canLookupCandidates) {
+      setLookupMessage(
+        userTier === "pro"
+          ? "Candidate lookup is unavailable until your account is verified."
+          : "Automatic candidate lookup is a paid feature. Free users and guests can still add candidates manually."
+      );
+      return;
+    }
+
     setLookingUp(raceId);
     setLookupMessage(null);
     try {
@@ -176,9 +231,6 @@ export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
     const updatedRaces = [...races, newRace];
     racesRef.current = updatedRaces;
     onRacesChange(updatedRaces);
-
-    // Auto-look up candidates
-    lookUpCandidates(raceId, raceName);
   };
 
   const addRace = () => {
@@ -265,12 +317,19 @@ export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
                 variant="outline"
                 size="sm"
                 className="text-xs"
+                disabled={!state}
                 onClick={() => handleTemplateClick(t)}
               >
                 {t.label}
               </Button>
             ))}
           </div>
+          {!state && (
+            <p className="text-xs text-muted-foreground">
+              Look up your address first to unlock race shortcuts tied to a
+              specific state or locality.
+            </p>
+          )}
 
           {/* District input for templates that need it */}
           {pendingTemplate && (
@@ -322,6 +381,9 @@ export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
           onLookUpCandidates={() =>
             lookUpCandidates(race.id, race.name)
           }
+          canLookUpCandidates={canLookupCandidates}
+          lookupRequirement={getRaceLookupRequirement(race.name, state)}
+          userTier={userTier}
         />
       ))}
 
@@ -341,6 +403,9 @@ interface RaceCardProps {
   onAddCandidate: (name: string, party: string) => void;
   onRemoveCandidate: (candidateId: string) => void;
   onLookUpCandidates: () => void;
+  canLookUpCandidates: boolean;
+  lookupRequirement: string | null;
+  userTier: UserTier;
 }
 
 function RaceCard({
@@ -350,6 +415,9 @@ function RaceCard({
   onAddCandidate,
   onRemoveCandidate,
   onLookUpCandidates,
+  canLookUpCandidates,
+  lookupRequirement,
+  userTier,
 }: RaceCardProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [candidateName, setCandidateName] = useState("");
@@ -470,12 +538,13 @@ function RaceCard({
               >
                 + Add Candidate
               </Button>
-              {race.candidates.length === 0 && !isLookingUp && (
+              {!isLookingUp && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={onLookUpCandidates}
                   className="text-xs"
+                  disabled={!canLookUpCandidates || Boolean(lookupRequirement)}
                 >
                   Look Up Candidates
                 </Button>
@@ -483,6 +552,14 @@ function RaceCard({
             </div>
           )}
         </div>
+        {(lookupRequirement || !canLookUpCandidates) && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {lookupRequirement ??
+              (userTier === "pro"
+                ? "Verify your account before using automatic candidate lookup."
+                : "Automatic candidate lookup is a paid feature. Add candidates manually on free or guest access.")}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

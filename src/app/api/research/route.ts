@@ -483,7 +483,7 @@ export async function POST(request: NextRequest) {
       ]
     );
     const ipQuotaFailure = await enforceQuotaRules(
-      admin ?? supabase,
+      supabase,
       buildScopedIpQuotaRules(request, quotaRules)
     );
     if (ipQuotaFailure) {
