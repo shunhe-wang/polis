@@ -6,7 +6,10 @@ import {
   enforceQuotaRules,
   getBallotParseQuotaRules,
 } from "@/lib/ai-quotas";
-import { parseBallotReviewDraft } from "@/lib/anthropic";
+import {
+  parseBallotReviewDraft,
+  parseBallotReviewDraftFile,
+} from "@/lib/anthropic";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import { isValidBallotReviewDraft } from "@/lib/validation";
 import type {
@@ -42,6 +45,19 @@ function isValidBody(body: unknown): body is ReviewDraftBody {
     (value.state === undefined ||
       value.state === null ||
       typeof value.state === "string")
+  );
+}
+
+function isSupportedUploadType(mediaType: string): mediaType is
+  | "application/pdf"
+  | "image/png"
+  | "image/jpeg"
+  | "image/webp" {
+  return (
+    mediaType === "application/pdf" ||
+    mediaType === "image/png" ||
+    mediaType === "image/jpeg" ||
+    mediaType === "image/webp"
   );
 }
 
@@ -136,18 +152,65 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const contentType = request.headers.get("content-type") ?? "";
+  let body: ReviewDraftBody | null = null;
+  let uploadFile:
+    | {
+        fileName: string;
+        mediaType: "application/pdf" | "image/png" | "image/jpeg" | "image/webp";
+        bytes: Uint8Array;
+      }
+    | null = null;
 
-  if (!isValidBody(body)) {
-    return NextResponse.json(
-      { error: "Paste more ballot text before parsing." },
-      { status: 400 }
-    );
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData().catch(() => null);
+    const file = formData?.get("file");
+    const state = formData?.get("state");
+
+    if (!(file instanceof File) || file.size === 0) {
+      return NextResponse.json(
+        { error: "Choose a ballot PDF or image to upload." },
+        { status: 400 }
+      );
+    }
+
+    if (!isSupportedUploadType(file.type)) {
+      return NextResponse.json(
+        { error: "Upload a PDF, PNG, JPEG, or WEBP ballot file." },
+        { status: 400 }
+      );
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "Keep ballot uploads under 8MB." },
+        { status: 400 }
+      );
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    uploadFile = {
+      fileName: file.name || "ballot-upload",
+      mediaType: file.type,
+      bytes: new Uint8Array(arrayBuffer),
+    };
+    body = {
+      ballotText: "",
+      state: typeof state === "string" ? state : null,
+    };
+  } else {
+    try {
+      const parsed = await request.json();
+      if (!isValidBody(parsed)) {
+        return NextResponse.json(
+          { error: "Paste more ballot text before parsing." },
+          { status: 400 }
+        );
+      }
+      body = parsed;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -191,10 +254,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const draft = await parseBallotReviewDraft({
-      ballotText: body.ballotText,
-      state: body.state ?? null,
-    });
+    const draft = uploadFile
+      ? await parseBallotReviewDraftFile({
+          fileName: uploadFile.fileName,
+          mediaType: uploadFile.mediaType,
+          base64Data: Buffer.from(uploadFile.bytes).toString("base64"),
+          state: body.state ?? null,
+        })
+      : await parseBallotReviewDraft({
+          ballotText: body.ballotText,
+          state: body.state ?? null,
+        });
 
     if (!isValidBallotReviewDraft(draft)) {
       return NextResponse.json(
@@ -204,14 +274,18 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedBallot = withIds(draft, body.state ?? null);
-    const textHash = hashText(body.ballotText.trim());
+    const textHash = uploadFile
+      ? hashText(Buffer.from(uploadFile.bytes).toString("base64"))
+      : hashText(body.ballotText.trim());
 
     await supabase.from("ballot_review_drafts").upsert(
       {
         user_id: user.id,
-        source: "pasted_text",
+        source: uploadFile ? "uploaded_file" : "pasted_text",
         text_hash: textHash,
-        raw_text: body.ballotText.trim(),
+        raw_text: uploadFile
+          ? `[uploaded ballot file] ${uploadFile.fileName}`
+          : body.ballotText.trim(),
         parsed_ballot: normalizedBallot,
         confidence: draft.confidence,
         notes: draft.notes,

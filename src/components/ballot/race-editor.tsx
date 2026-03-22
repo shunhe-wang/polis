@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { UserTier } from "@/lib/freemium";
 import type { Race, Candidate } from "@/lib/types";
+import { formatPartyInline } from "@/lib/party-format";
 
 interface RaceEditorProps {
   races: Race[];
@@ -487,7 +488,7 @@ function RaceCard({
                     {candidate.name}
                     {candidate.party && (
                       <span className="ml-1 text-muted-foreground">
-                        ({candidate.party})
+                        {formatPartyInline(candidate.party)}
                       </span>
                     )}
                   </span>

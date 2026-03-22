@@ -62,7 +62,6 @@ export default function GuidePage() {
   const [measuresCollapsed, setMeasuresCollapsed] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [guideAccess, setGuideAccess] = useState<GuideAccessState | null>(null);
-  const skipCacheRef = useRef(false);
   const prefetchedBallotKeysRef = useRef<Set<string>>(new Set());
 
   const {
@@ -158,10 +157,7 @@ export default function GuidePage() {
       !!guideAccess?.unlocked
     ) {
       setHasStarted(true);
-      startResearch(valuesProfile, ballotInput, {
-        skipCache: skipCacheRef.current,
-      });
-      skipCacheRef.current = false;
+      startResearch(valuesProfile, ballotInput);
     }
   }, [
     valuesProfile,
@@ -847,16 +843,6 @@ export default function GuidePage() {
                 onClick={goToBallotEditor}
               >
                 Edit Ballot
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setHasStarted(false);
-                  setShareUrl(null);
-                  skipCacheRef.current = true;
-                }}
-              >
-                Re-run Research
               </Button>
             </div>
           </div>

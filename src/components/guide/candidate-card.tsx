@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ISSUE_LABELS, type CandidateResult } from "@/lib/types";
+import { formatPartyDetail } from "@/lib/party-format";
 
 interface CandidateCardProps {
   result: CandidateResult;
@@ -43,7 +44,9 @@ export function CandidateCard({ result, isRecommended }: CandidateCardProps) {
               )}
             </div>
             {result.party && (
-              <p className="text-sm text-muted-foreground">{result.party}</p>
+              <p className="text-sm text-muted-foreground">
+                {formatPartyDetail(result.party)}
+              </p>
             )}
           </div>
           <div

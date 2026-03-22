@@ -271,6 +271,61 @@ Rules:
 ${input.ballotText}`;
 }
 
+function buildBallotFileParsePrompt(input: {
+  state: string | null;
+  fileName: string;
+}): string {
+  return `Parse the uploaded ballot file into a clean ballot draft.
+
+## Context
+- State: ${input.state ?? "Unknown"}
+- File name: ${input.fileName}
+
+## Instructions
+Use only the uploaded ballot file. Do not do web research. Extract the likely election info, candidate races, and ballot measures. Return ONLY valid JSON with this exact structure:
+
+{
+  "election": {
+    "name": "<string or null>",
+    "electionDay": "<YYYY-MM-DD string or null>",
+    "kind": "<primary|general|special|other|null>",
+    "selectedParty": "<string or null>"
+  },
+  "races": [
+    {
+      "name": "<race title>",
+      "level": "<federal|state|local>",
+      "contestType": "<string or null>",
+      "candidates": [
+        {
+          "name": "<candidate name>",
+          "party": "<string or null>"
+        }
+      ]
+    }
+  ],
+  "measures": [
+    {
+      "title": "<measure title>",
+      "description": "<plain-language description from the ballot>",
+      "type": "<referendum|initiative|amendment|other>"
+    }
+  ],
+  "confidence": <integer 0-100>,
+  "notes": [
+    "<short note about ambiguities, OCR issues, or anything the user should verify>"
+  ]
+}
+
+Rules:
+- Prefer omission over guessing.
+- If party is not clearly stated, use null.
+- If the election date is unclear, use null.
+- Keep notes short and concrete.
+- Keep measure descriptions concise.
+- Preserve the ballot's jurisdiction-specific race names.`;
+}
+
 function buildCandidateDossierPrompt(
   candidate: Candidate,
   race: Race,
@@ -404,6 +459,43 @@ async function runJsonCompletion<T>(options: {
   return JSON.parse(jsonMatch[0]) as T;
 }
 
+async function runJsonCompletionWithContent<T>(options: {
+  model: string;
+  maxTokens: number;
+  prompt: string;
+  content: Array<Record<string, unknown>>;
+  parseError: string;
+}): Promise<T> {
+  const response = await anthropic.messages.create({
+    model: options.model,
+    max_tokens: options.maxTokens,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...options.content,
+          { type: "text", text: options.prompt },
+        ] as never,
+      },
+    ],
+  });
+
+  let responseText = "";
+  for (const block of response.content) {
+    if (block.type === "text") {
+      responseText += block.text;
+    }
+  }
+
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error(options.parseError);
+  }
+
+  return JSON.parse(jsonMatch[0]) as T;
+}
+
 export function runCandidateDossierResearch(
   req: ResearchRequest
 ): Promise<CandidateDossier> {
@@ -472,5 +564,42 @@ export function parseBallotReviewDraft(input: {
     maxTokens: 1800,
     prompt: buildBallotTextParsePrompt(input),
     parseError: "Could not parse ballot review draft",
+  });
+}
+
+export function parseBallotReviewDraftFile(input: {
+  fileName: string;
+  mediaType: "application/pdf" | "image/png" | "image/jpeg" | "image/webp";
+  base64Data: string;
+  state: string | null;
+}): Promise<BallotReviewDraft> {
+  const attachment =
+    input.mediaType === "application/pdf"
+      ? {
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: input.mediaType,
+            data: input.base64Data,
+          },
+        }
+      : {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: input.mediaType,
+            data: input.base64Data,
+          },
+        };
+
+  return runJsonCompletionWithContent<BallotReviewDraft>({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 2200,
+    prompt: buildBallotFileParsePrompt({
+      state: input.state,
+      fileName: input.fileName,
+    }),
+    content: [attachment],
+    parseError: "Could not parse uploaded ballot draft",
   });
 }

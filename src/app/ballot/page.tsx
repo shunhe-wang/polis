@@ -94,6 +94,7 @@ export default function BallotPage() {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [draftFile, setDraftFile] = useState<File | null>(null);
   const [draftPreview, setDraftPreview] = useState<BallotInput | null>(null);
   const [draftSummary, setDraftSummary] = useState<BallotReviewDraft | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
@@ -399,6 +400,54 @@ export default function BallotPage() {
     }
   };
 
+  const handleUploadDraft = async () => {
+    if (!draftFile) return;
+
+    setIsParsingDraft(true);
+    setDraftError(null);
+    try {
+      const formData = new FormData();
+      formData.set("file", draftFile);
+      if (state) {
+        formData.set("state", state);
+      }
+
+      const response = await fetch("/api/ballot/review-draft", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setDraftError(
+          data && typeof data === "object" && "error" in data
+            ? String(data.error)
+            : "Could not parse this ballot file."
+        );
+        return;
+      }
+
+      if (
+        !data ||
+        typeof data !== "object" ||
+        !("normalizedBallot" in data) ||
+        !data.normalizedBallot
+      ) {
+        setDraftError("Could not parse this ballot file.");
+        return;
+      }
+
+      setDraftPreview(data.normalizedBallot as BallotInput);
+      setDraftSummary(
+        ("draft" in data ? data.draft : null) as BallotReviewDraft | null
+      );
+    } catch {
+      setDraftError("Could not parse this ballot file.");
+    } finally {
+      setIsParsingDraft(false);
+    }
+  };
+
   if (!valuesProfile) {
     return null; // redirecting
   }
@@ -487,11 +536,12 @@ export default function BallotPage() {
             <CardContent className="pt-6">
               <div className="space-y-3">
                 <div>
-                  <h3 className="text-sm font-medium">Paste ballot text for review</h3>
+                  <h3 className="text-sm font-medium">Upload or paste ballot for review</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     If the official site shows your ballot but Google Civic is
-                    incomplete, paste the ballot text here. Polis will turn it
-                    into a reviewable draft you can apply below.
+                    incomplete, upload a sample-ballot PDF/image or paste the
+                    ballot text here. Polis will turn it into a reviewable
+                    draft you can apply below.
                   </p>
                 </div>
                 {!account.trustedAccount ? (
@@ -501,6 +551,40 @@ export default function BallotPage() {
                   </div>
                 ) : (
                   <>
+                    <div className="space-y-2 rounded-lg border border-black/5 bg-background/70 p-4 dark:border-white/10">
+                      <div>
+                        <p className="text-sm font-medium">
+                          Upload ballot PDF or image
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Best formats: official sample-ballot PDF, screenshot,
+                          PNG, JPEG, or WEBP. Keep uploads under 8MB.
+                        </p>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".pdf,image/png,image/jpeg,image/webp"
+                        onChange={(event) =>
+                          setDraftFile(event.target.files?.[0] ?? null)
+                        }
+                        className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={handleUploadDraft}
+                          disabled={!draftFile || isParsingDraft}
+                        >
+                          {isParsingDraft ? "Parsing..." : "Parse Ballot File"}
+                        </Button>
+                        {draftFile && (
+                          <p className="self-center text-xs text-muted-foreground">
+                            {draftFile.name}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
                     <Textarea
                       value={draftText}
                       onChange={(event) => setDraftText(event.target.value)}

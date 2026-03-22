@@ -15,6 +15,7 @@ import type {
 } from "@/lib/types";
 import type { UserTier } from "@/lib/freemium";
 import { useState } from "react";
+import { formatPartyInline } from "@/lib/party-format";
 
 interface FreeGuideBrowserProps {
   ballotInput: BallotInput;
@@ -166,7 +167,9 @@ export function FreeGuideBrowser({
                             {candidate.name}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {candidate.party ?? "Party not listed"}
+                            {candidate.party
+                              ? formatPartyInline(candidate.party)
+                              : "Party not listed"}
                           </p>
                         </div>
 
