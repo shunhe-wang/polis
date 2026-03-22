@@ -8,6 +8,7 @@ import { buildBallotHash } from "@/lib/research-cache";
 import { recordAppEvent } from "@/lib/observability";
 import type { BallotInput } from "@/lib/types";
 import { isValidBallotInput } from "@/lib/validation";
+import { getAccountTrustStatus } from "@/lib/account-trust";
 
 interface GuideAccessBody {
   ballotInput: BallotInput;
@@ -62,6 +63,22 @@ export async function POST(request: NextRequest) {
       powerPassExpiresAt: null,
       requiresAuth: true,
     });
+  }
+
+  const trust = getAccountTrustStatus(user);
+  if (!trust.trusted) {
+    return NextResponse.json(
+      {
+        error: trust.reason,
+        unlocked: false,
+        canUnlock: false,
+        source: null,
+        electionPassCredits: 0,
+        powerPassRunsRemaining: 0,
+        powerPassExpiresAt: null,
+      },
+      { status: 403 }
+    );
   }
 
   const ballotHash = buildBallotHash(body.ballotInput);

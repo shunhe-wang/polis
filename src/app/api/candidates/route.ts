@@ -5,6 +5,9 @@ import {
   enforceQuotaRules,
   getCandidateLookupQuotaRules,
 } from "@/lib/ai-quotas";
+import { getAccountTrustStatus } from "@/lib/account-trust";
+import { buildScopedIpQuotaRules } from "@/lib/request-identity";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const anthropic = new Anthropic();
 
@@ -37,6 +40,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const trust = getAccountTrustStatus(user);
+  if (!trust.trusted) {
+    return NextResponse.json(
+      { error: trust.reason, candidates: [] },
+      { status: 403 }
+    );
+  }
+
   const body = await request.json().catch(() => null);
 
   if (
@@ -64,6 +75,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       supabase,
       quotaRules.map((rule) => ({ rule, incrementBy: 1 }))
     );
+    const ipQuotaFailure = await enforceQuotaRules(
+      createAdminClient() ?? supabase,
+      buildScopedIpQuotaRules(request, quotaRules)
+    );
 
     if (quotaFailure) {
       return NextResponse.json(
@@ -78,6 +93,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             "Retry-After": String(quotaFailure.retryAfterSeconds),
           },
         }
+      );
+    }
+    if (ipQuotaFailure) {
+      return NextResponse.json(
+        {
+          error:
+            "Automatic candidate lookup is rate limited on this connection. Please wait and try again, or add candidates manually.",
+          candidates: [],
+        },
+        { status: 429 }
       );
     }
 

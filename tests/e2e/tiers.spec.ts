@@ -184,6 +184,9 @@ function accountSummary(tier: "guest" | "free" | "pro") {
     return {
       tier: "guest",
       isAuthenticated: false,
+      trustedAccount: false,
+      emailVerified: false,
+      trustReason: null,
       planKey: "guest",
       planLabel: "Guest",
       starterAnalysesRemaining: 0,
@@ -198,6 +201,9 @@ function accountSummary(tier: "guest" | "free" | "pro") {
     return {
       tier: "free",
       isAuthenticated: true,
+      trustedAccount: true,
+      emailVerified: true,
+      trustReason: null,
       planKey: "free",
       planLabel: "Free",
       starterAnalysesRemaining: 1,
@@ -211,6 +217,9 @@ function accountSummary(tier: "guest" | "free" | "pro") {
   return {
     tier: "pro",
     isAuthenticated: true,
+    trustedAccount: true,
+    emailVerified: true,
+    trustReason: null,
     planKey: "power_14d",
     planLabel: "Power Pass",
     starterAnalysesRemaining: 1,
@@ -360,7 +369,7 @@ test("pro users see full-ballot guide results", async ({ page }) => {
 
   await page.goto("/guide");
 
-  await expect(page.getByText("Power Pass")).toBeVisible();
+  await expect(page.getByText("Power Pass", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save & Share Guide" })).toBeVisible();
   await expect(page.getByText("Amendment 1")).toBeVisible();
   await expect(page.getByRole("button", { name: "Collapse" }).first()).toBeVisible();

@@ -9,12 +9,19 @@ import { CollapsibleContent } from "./collapsible-content";
 import type { CandidateResult } from "@/lib/types";
 
 interface RaceSectionProps {
+  sectionId?: string;
   raceName: string;
   candidates: CandidateResult[];
+  compactMode?: boolean;
 }
 
-export function RaceSection({ raceName, candidates }: RaceSectionProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+export function RaceSection({
+  sectionId,
+  raceName,
+  candidates,
+  compactMode = false,
+}: RaceSectionProps) {
+  const [isCollapsed, setIsCollapsed] = useState(compactMode);
   // Sort by alignment score descending
   const sorted = [...candidates].sort(
     (a, b) => b.alignmentScore - a.alignmentScore
@@ -28,7 +35,10 @@ export function RaceSection({ raceName, candidates }: RaceSectionProps) {
       recommended.alignmentScore - sorted[1].alignmentScore >= 10);
 
   return (
-    <section className="rounded-[1.75rem] border border-black/5 bg-white/70 p-4 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:p-5">
+    <section
+      id={sectionId}
+      className="scroll-mt-28 rounded-[1.75rem] border border-black/5 bg-white/70 p-4 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:p-5"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -55,6 +65,14 @@ export function RaceSection({ raceName, candidates }: RaceSectionProps) {
               </span>
             ))}
           </div>
+          {recommended && (
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Top match right now:{" "}
+              <span className="font-medium text-foreground">{recommended.name}</span>
+              {" "}at {recommended.alignmentScore}/100.
+              {recommended.reasoning ? ` ${recommended.reasoning.split("\n")[0]}` : ""}
+            </p>
+          )}
         </div>
         <Button
           variant="outline"

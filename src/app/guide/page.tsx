@@ -59,6 +59,7 @@ export default function GuidePage() {
     string | null
   >(null);
   const [measuresCollapsed, setMeasuresCollapsed] = useState(false);
+  const [compactMode, setCompactMode] = useState(false);
   const [guideAccess, setGuideAccess] = useState<GuideAccessState | null>(null);
   const skipCacheRef = useRef(false);
 
@@ -192,6 +193,21 @@ export default function GuidePage() {
 
     return map;
   }, [ballotInput]);
+
+  const sectionLinks = useMemo(() => {
+    const links = ballotInput
+      ? ballotInput.races.map((race) => ({
+          id: `race-${race.id}`,
+          label: race.name,
+        }))
+      : [];
+
+    if ((measureResults.length > 0 || ballotInput?.measures.length) && ballotInput) {
+      links.push({ id: "ballot-measures", label: "Measures" });
+    }
+
+    return links;
+  }, [ballotInput, measureResults.length]);
 
   const handleSaveAndShare = useCallback(async () => {
     if (
@@ -347,7 +363,7 @@ export default function GuidePage() {
   }, [router]);
 
   const handleUnlockGuide = useCallback(async () => {
-    if (!ballotInput) return;
+    if (!ballotInput || !account.trustedAccount) return;
 
     setSaveError(null);
     const confirmed = window.confirm(
@@ -409,7 +425,7 @@ export default function GuidePage() {
     } catch {
       setSaveError("Could not unlock this ballot.");
     }
-  }, [ballotInput, guideAccess?.powerPassRunsRemaining]);
+  }, [account.trustedAccount, ballotInput, guideAccess?.powerPassRunsRemaining]);
 
   if (!valuesProfile || !ballotInput) {
     return null;
@@ -426,6 +442,9 @@ export default function GuidePage() {
           <p className="mt-2 text-sm text-muted-foreground">
             {!tierLoaded
               ? "Preparing your guide..."
+              : !account.trustedAccount && account.tier !== "guest"
+                ? account.trustReason ??
+                  "Verify your email before starter analysis, passes, or full guide research will run."
               : guideAccess?.unlocked && isResearching
               ? "Sit tight — we're doing deep research on each item to give you comprehensive, cited results. This may take a few minutes."
               : guideAccess?.unlocked &&
@@ -461,11 +480,58 @@ export default function GuidePage() {
             </p>
           )}
           {tierLoaded && (
+            <div className="mx-auto mt-5 max-w-3xl rounded-[1.5rem] border border-black/5 bg-white/72 p-4 text-left shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Access Status
+                  </p>
+                  <p className="text-base font-semibold text-foreground">
+                    {guideAccess?.unlocked
+                      ? "Full guide unlocked for this ballot"
+                      : account.tier === "guest"
+                        ? "Guest mode: ballot only"
+                        : account.tier === "free"
+                          ? "Free mode: links plus 1 starter analysis"
+                          : "Paid pass available but not spent on this ballot yet"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {guideAccess?.unlocked
+                      ? "This ballot can run full personalized research, measures, and save/share."
+                      : guideAccess?.canUnlock
+                        ? "You already have paid unlocks available. Spend one only when this ballot is final."
+                        : account.trustReason ??
+                          "Browse links first. Upgrade or spend a pass only when you want the full synthesis."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  {account.tier === "free" && (
+                    <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                      {account.starterAnalysesRemaining} starter analysis left
+                    </span>
+                  )}
+                  {account.electionPassCredits > 0 && (
+                    <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                      {account.electionPassCredits} election pass credit
+                      {account.electionPassCredits === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  {account.powerPassRunsRemaining > 0 && (
+                    <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                      {account.powerPassRunsRemaining} power pass run
+                      {account.powerPassRunsRemaining === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {tierLoaded && (
             <div className="mt-4 flex flex-wrap justify-center gap-3">
               <Button variant="outline" onClick={goToBallotEditor}>
                 Edit Ballot
               </Button>
-              {!guideAccess?.unlocked && guideAccess?.canUnlock && (
+              {!guideAccess?.unlocked && guideAccess?.canUnlock && account.trustedAccount && (
                 <Button
                   className="bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white shadow-[0_20px_40px_-20px_rgba(8,47,73,0.75)] hover:opacity-95 dark:text-white"
                   onClick={handleUnlockGuide}
@@ -475,12 +541,20 @@ export default function GuidePage() {
                     : "Unlock with Election Pass"}
                 </Button>
               )}
-              {!guideAccess?.unlocked && !guideAccess?.canUnlock && account.tier !== "guest" && (
+              {!guideAccess?.unlocked && !guideAccess?.canUnlock && account.tier !== "guest" && account.trustedAccount && (
                 <Link href="/pricing">
                   <Button className="bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white shadow-[0_20px_40px_-20px_rgba(8,47,73,0.75)] hover:opacity-95 dark:text-white">
                     See Passes
                   </Button>
                 </Link>
+              )}
+              {guideAccess?.unlocked && (
+                <Button
+                  variant="outline"
+                  onClick={() => setCompactMode((current) => !current)}
+                >
+                  {compactMode ? "Expanded View" : "Compact View"}
+                </Button>
               )}
             </div>
           )}
@@ -511,6 +585,16 @@ export default function GuidePage() {
           </div>
         )}
 
+        {tierLoaded && !account.trustedAccount && account.tier !== "guest" && (
+          <div className="mb-6 rounded-[1.5rem] border border-amber-500/20 bg-amber-500/10 p-5 text-sm text-amber-900 dark:text-amber-100">
+            <p className="font-medium">Verify this account before using AI or paid unlocks</p>
+            <p className="mt-1">
+              {account.trustReason ??
+                "Starter analysis, passes, and full guide research require a verified non-disposable email."}
+            </p>
+          </div>
+        )}
+
         {/* Error state */}
         {guideAccess?.unlocked && error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -534,6 +618,8 @@ export default function GuidePage() {
           <FreeGuideBrowser
             ballotInput={ballotInput}
             userTier={account.tier}
+            trustedAccount={account.trustedAccount}
+            trustReason={account.trustReason}
             starterAnalysesRemaining={account.starterAnalysesRemaining}
             starterResult={starterResult}
             starterError={starterError}
@@ -588,12 +674,29 @@ export default function GuidePage() {
         {/* Results */}
         {guideAccess?.unlocked && results.length > 0 && (
           <div className="mt-8 space-y-10">
+            {sectionLinks.length > 1 && (
+              <div className="sticky top-16 z-10 -mb-4 overflow-x-auto rounded-full border border-black/5 bg-background/85 px-3 py-2 backdrop-blur dark:border-white/10">
+                <div className="flex min-w-max gap-2">
+                  {sectionLinks.map((link) => (
+                    <a
+                      key={link.id}
+                      href={`#${link.id}`}
+                      className="rounded-full border border-black/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground dark:border-white/10"
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             {Array.from(resultsByRace.entries()).map(
               ([raceName, candidates]) => (
                 <RaceSection
-                  key={raceName}
+                  key={`${raceName}-${compactMode ? "compact" : "expanded"}`}
+                  sectionId={`race-${ballotInput.races.find((race) => race.name === raceName)?.id ?? raceName}`}
                   raceName={raceName}
                   candidates={candidates}
+                  compactMode={compactMode}
                 />
               )
             )}
@@ -603,7 +706,10 @@ export default function GuidePage() {
         {/* Ballot Measure Results */}
         {guideAccess?.unlocked &&
           measureResults.length > 0 && (
-          <div className="mt-10 rounded-[1.75rem] border border-black/5 bg-white/72 p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4">
+          <div
+            id="ballot-measures"
+            className="mt-10 scroll-mt-28 rounded-[1.75rem] border border-black/5 bg-white/72 p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4"
+          >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Ballot Measures</h2>

@@ -74,6 +74,11 @@ export default function PricingPage() {
               ? ` • ${account.starterAnalysesRemaining} starter analysis remaining`
               : ""}
           </p>
+          {account.isAuthenticated && !account.trustedAccount && account.trustReason && (
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+              {account.trustReason}
+            </p>
+          )}
           {account.isAuthenticated && (
             <p className="mt-2 text-sm text-muted-foreground">
               {account.electionPassCredits} election pass credit
@@ -107,6 +112,7 @@ export default function PricingPage() {
             features={[
               "Complete onboarding",
               "Build or import your ballot",
+              "Verify against official sample-ballot links",
               "No candidate links or AI analysis",
             ]}
             action={
@@ -127,6 +133,7 @@ export default function PricingPage() {
               "Everything in Guest",
               "Candidate source links",
               "1 starter candidate analysis",
+              "Best way to test Polis before paying",
             ]}
             action={
               account.isAuthenticated ? (
@@ -153,15 +160,20 @@ export default function PricingPage() {
               "Ballot measure analysis",
               "Save and share guides",
               "Unlocks one ballot",
+              "Best for most voters",
             ]}
             action={
               account.isAuthenticated ? (
                 <Button
                   className="w-full rounded-full bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white shadow-[0_20px_40px_-20px_rgba(8,47,73,0.75)] hover:opacity-95 dark:text-white"
-                  disabled={!account.checkoutConfigured || isLoading}
+                  disabled={!account.checkoutConfigured || isLoading || !account.trustedAccount}
                   onClick={() => void redirectToBilling("election_pass")}
                 >
-                  {account.checkoutConfigured ? "Buy Election Pass" : "Billing Not Configured"}
+                  {!account.trustedAccount
+                    ? "Verify Email to Buy"
+                    : account.checkoutConfigured
+                      ? "Buy Election Pass"
+                      : "Billing Not Configured"}
                 </Button>
               ) : (
                 <Link href="/auth/signup">
@@ -184,16 +196,17 @@ export default function PricingPage() {
               "Three full-ballot unlocks",
               "Use them across different elections",
               "Cheaper than buying one at a time",
+              "Good for local + primary + general coverage",
             ]}
             action={
               account.isAuthenticated ? (
                 <Button
                   variant="outline"
                   className="w-full rounded-full"
-                  disabled={!account.checkoutConfigured || isLoading}
+                  disabled={!account.checkoutConfigured || isLoading || !account.trustedAccount}
                   onClick={() => void redirectToBilling("bundle_3")}
                 >
-                  Buy 3-Pack
+                  {account.trustedAccount ? "Buy 3-Pack" : "Verify Email to Buy"}
                 </Button>
               ) : (
                 <Link href="/auth/signup">
@@ -214,16 +227,17 @@ export default function PricingPage() {
               "Ten ballot unlocks",
               "Best for nerds and multi-ballot comparisons",
               "Expires 14 days after activation",
+              "Built for journalists, organizers, and power users",
             ]}
             action={
               account.isAuthenticated ? (
                 <Button
                   variant="outline"
                   className="w-full rounded-full"
-                  disabled={!account.checkoutConfigured || isLoading}
+                  disabled={!account.checkoutConfigured || isLoading || !account.trustedAccount}
                   onClick={() => void redirectToBilling("power_14d")}
                 >
-                  Buy Power Pass
+                  {account.trustedAccount ? "Buy Power Pass" : "Verify Email to Buy"}
                 </Button>
               ) : (
                 <Link href="/auth/signup">

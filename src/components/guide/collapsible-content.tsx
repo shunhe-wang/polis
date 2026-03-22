@@ -15,10 +15,10 @@ export function CollapsibleContent({
   return (
     <div
       className={cn(
-        "grid overflow-hidden transition-all duration-300 ease-out",
+        "grid overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[grid-template-rows,opacity,transform]",
         open
-          ? "mt-4 grid-rows-[1fr] opacity-100"
-          : "mt-0 grid-rows-[0fr] opacity-0",
+          ? "mt-4 grid-rows-[1fr] translate-y-0 opacity-100"
+          : "mt-0 grid-rows-[0fr] -translate-y-1 opacity-0",
         className
       )}
     >

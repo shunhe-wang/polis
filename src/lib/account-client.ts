@@ -2,6 +2,7 @@ import {
   DEFAULT_ACCOUNT_SUMMARY,
   type AccountSummary,
 } from "@/lib/freemium";
+import { getAccountTrustStatus } from "@/lib/account-trust";
 import { createClient } from "@/lib/supabase/client";
 
 export async function getAccountSummary(): Promise<AccountSummary> {
@@ -20,6 +21,9 @@ export async function getAccountSummary(): Promise<AccountSummary> {
         data.tier === "free" ||
         data.tier === "pro") &&
       typeof data.isAuthenticated === "boolean" &&
+      typeof data.trustedAccount === "boolean" &&
+      typeof data.emailVerified === "boolean" &&
+      (data.trustReason === null || typeof data.trustReason === "string") &&
       typeof data.starterAnalysesRemaining === "number" &&
       (data.planKey === "guest" ||
         data.planKey === "free" ||
@@ -47,14 +51,18 @@ export async function getAccountSummary(): Promise<AccountSummary> {
         } = await supabase.auth.getUser();
 
         if (user) {
+          const trust = getAccountTrustStatus(user);
           return {
             ...DEFAULT_ACCOUNT_SUMMARY,
             tier: "free",
             isAuthenticated: true,
+            trustedAccount: trust.trusted,
+            emailVerified: trust.emailVerified,
+            trustReason: trust.reason,
             planKey: "free",
             planLabel: "Free",
             checkoutConfigured: data.checkoutConfigured,
-            starterAnalysesRemaining: 1,
+            starterAnalysesRemaining: trust.trusted ? 1 : 0,
             electionPassCredits: 0,
             powerPassRunsRemaining: 0,
             powerPassExpiresAt: null,

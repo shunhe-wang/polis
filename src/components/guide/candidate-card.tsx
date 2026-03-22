@@ -35,7 +35,7 @@ export function CandidateCard({ result, isRecommended }: CandidateCardProps) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold">{result.name}</h3>
+              <h3 className="text-lg font-semibold tracking-tight">{result.name}</h3>
               {isRecommended && (
                 <Badge variant="default" className="text-xs">
                   Recommended
@@ -120,9 +120,9 @@ export function CandidateCard({ result, isRecommended }: CandidateCardProps) {
         {showDetails && (
           <div className="mt-4 space-y-4">
             {/* Reasoning */}
-            <div>
+            <div className="rounded-2xl border border-black/5 bg-background/75 p-4 dark:border-white/10">
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Reasoning
+                Recommendation Summary
               </p>
               <p className="text-sm leading-relaxed whitespace-pre-line">
                 {result.reasoning}

@@ -19,6 +19,8 @@ import { useState } from "react";
 interface FreeGuideBrowserProps {
   ballotInput: BallotInput;
   userTier: UserTier;
+  trustedAccount: boolean;
+  trustReason: string | null;
   starterAnalysesRemaining: number;
   starterResult: CandidateResult | null;
   starterError: string | null;
@@ -32,6 +34,8 @@ interface FreeGuideBrowserProps {
 export function FreeGuideBrowser({
   ballotInput,
   userTier,
+  trustedAccount,
+  trustReason,
   starterAnalysesRemaining,
   starterResult,
   starterError,
@@ -43,9 +47,15 @@ export function FreeGuideBrowser({
 }: FreeGuideBrowserProps) {
   const [collapsedRaceIds, setCollapsedRaceIds] = useState<string[]>([]);
   const [measuresCollapsed, setMeasuresCollapsed] = useState(false);
+  const planHeading = userTier === "pro" ? "Ballot Browser" : "Free Plan";
   const starterPlanCopy =
     userTier === "guest"
       ? "Browse your ballot, open source links for each candidate, and create a free account to unlock 1 starter candidate analysis."
+      : userTier === "pro"
+        ? "This ballot is not unlocked yet. Browse candidate links first, then spend a pass only when you want the full personalized guide."
+      : !trustedAccount
+        ? trustReason ??
+          "Verify your email with a real inbox before starter analysis or paid passes will work."
       : starterAnalysesRemaining > 0
         ? `Browse your ballot, open source links for each candidate, and unlock ${starterAnalysesRemaining} free starter candidate analysis${starterAnalysesRemaining === 1 ? "" : "es"}.`
         : "Browse your ballot and open source links for each candidate. Your free starter candidate analysis has already been used.";
@@ -56,14 +66,20 @@ export function FreeGuideBrowser({
         <CardContent className="pt-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
-              <h2 className="text-lg font-semibold">Free Plan</h2>
+              <h2 className="text-lg font-semibold">{planHeading}</h2>
               <p className="text-sm text-muted-foreground">
                 {starterPlanCopy}
               </p>
               <p className="text-sm text-muted-foreground">
-                Full personalized ballot research, measure analysis, and
-                sharing unlock with a paid pass.
+                {userTier === "pro"
+                  ? "Full personalized ballot research, measure analysis, and sharing start only after you unlock this ballot."
+                  : "Full personalized ballot research, measure analysis, and sharing unlock with a paid pass."}
               </p>
+              {!trustedAccount && userTier !== "guest" && (
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                  Starter analysis and checkout stay locked until this account uses a verified, non-disposable email.
+                </p>
+              )}
             </div>
             {userTier === "guest" && (
               <div className="flex flex-col gap-2 sm:min-w-40">
@@ -179,12 +195,17 @@ export function FreeGuideBrowser({
                               Already have an account?
                             </Button>
                           </>
+                        ) : userTier === "pro" ? (
+                          <Button size="sm" variant="outline" disabled>
+                            Unlock this ballot above for full analysis
+                          </Button>
                         ) : (
                           <Button
                             size="sm"
                             variant={isUnlockedCandidate ? "outline" : "default"}
                             disabled={
                               analyzingCandidateId !== null ||
+                              !trustedAccount ||
                               (!isUnlockedCandidate &&
                                 starterAnalysesRemaining <= 0)
                             }
@@ -192,6 +213,8 @@ export function FreeGuideBrowser({
                           >
                             {analyzingCandidateId === candidate.id
                               ? "Analyzing..."
+                              : !trustedAccount
+                                ? "Verify Email First"
                               : isUnlockedCandidate
                                 ? "Starter Analysis Unlocked"
                                 : starterAnalysesRemaining > 0

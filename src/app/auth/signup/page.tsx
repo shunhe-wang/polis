@@ -9,6 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { syncToSupabase } from "@/lib/persistence";
+import {
+  isDisposableEmailDomain,
+  shouldRequireVerifiedEmail,
+} from "@/lib/account-trust";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -29,6 +33,14 @@ export default function SignupPage() {
 
     setIsLoading(true);
     setError(null);
+
+    if (isDisposableEmailDomain(email)) {
+      setError(
+        "Use a real email address. Temporary inboxes are blocked for free analyses and paid unlocks."
+      );
+      setIsLoading(false);
+      return;
+    }
 
     const { data, error: authError } = await supabase.auth.signUp({
       email,
@@ -62,6 +74,12 @@ export default function SignupPage() {
             We sent a confirmation link to <strong>{email}</strong>. Click it to
             activate your account, then come back and sign in.
           </p>
+          {shouldRequireVerifiedEmail() && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Verified email is required before free analyses, paid unlocks, or
+              full guide research will run.
+            </p>
+          )}
           <Link
             href="/auth/login"
             className="mt-6 inline-block text-sm underline underline-offset-2 hover:text-foreground"
@@ -81,6 +99,10 @@ export default function SignupPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             Sign up to save your values profile, keep your ballot, and unlock 1
             free starter candidate analysis.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Use a real email you can verify. Temporary inboxes are blocked for
+            AI features and paid unlocks.
           </p>
         </div>
 

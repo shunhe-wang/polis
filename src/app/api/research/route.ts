@@ -38,6 +38,7 @@ import {
 import {
   buildBallotHash,
   buildResearchCacheKey,
+  buildValuesProfileHash,
   loadResearchCache,
   saveResearchCache,
 } from "@/lib/research-cache";
@@ -49,8 +50,18 @@ import {
   saveCandidateDossier,
   saveMeasureDossier,
 } from "@/lib/research-dossiers";
+import {
+  buildCandidatePersonalizationCacheKey,
+  buildMeasurePersonalizationCacheKey,
+  loadCandidatePersonalizationCache,
+  loadMeasurePersonalizationCache,
+  saveCandidatePersonalizationCache,
+  saveMeasurePersonalizationCache,
+} from "@/lib/research-item-cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordAppEvent } from "@/lib/observability";
+import { getAccountTrustStatus } from "@/lib/account-trust";
+import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 
 interface ResearchRequestBody {
   valuesProfile: ValuesProfile;
@@ -179,6 +190,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const trust = getAccountTrustStatus(user);
+  if (!trust.trusted) {
+    return new Response(
+      JSON.stringify({ error: trust.reason }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -225,6 +244,8 @@ export async function POST(request: NextRequest) {
   }
 
   const cacheKey = buildResearchCacheKey(valuesProfile, ballotInput);
+  const admin = createAdminClient();
+  const valuesProfileHash = buildValuesProfileHash(valuesProfile);
 
   const cached = await loadResearchCache(supabase, cacheKey);
   if (cached) {
@@ -324,6 +345,133 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const cachedCandidateResults = new Map<string, CandidateResult>();
+  const cachedMeasureResults = new Map<string, MeasureResult>();
+
+  if (admin) {
+    await Promise.all(
+      researchItems.map(async (item) => {
+        const dossierKey = buildCandidateDossierKey(
+          item.candidate,
+          item.race,
+          item.state
+        );
+        const itemCacheKey = buildCandidatePersonalizationCacheKey({
+          dossierKey,
+          valuesProfileHash,
+          mode: "full",
+        });
+        const cachedResult = await loadCandidatePersonalizationCache(
+          admin,
+          itemCacheKey
+        );
+        if (cachedResult && isValidCandidateResult(cachedResult)) {
+          cachedCandidateResults.set(
+            item.candidate.id,
+            sanitizeCandidateResult({
+              ...cachedResult,
+              candidateId: item.candidate.id,
+            })
+          );
+        }
+      })
+    );
+
+    await Promise.all(
+      measureItems.map(async (item) => {
+        const dossierKey = buildMeasureDossierKey(item.measure, item.state);
+        const itemCacheKey = buildMeasurePersonalizationCacheKey({
+          dossierKey,
+          valuesProfileHash,
+        });
+        const cachedResult = await loadMeasurePersonalizationCache(
+          admin,
+          itemCacheKey
+        );
+        if (cachedResult && isValidMeasureResult(cachedResult)) {
+          cachedMeasureResults.set(
+            item.measure.id,
+            sanitizeMeasureResult({
+              ...cachedResult,
+              measureId: item.measure.id,
+            })
+          );
+        }
+      })
+    );
+  }
+
+  const uncachedCandidateItems = researchItems.filter(
+    (item) => !cachedCandidateResults.has(item.candidate.id)
+  );
+  const uncachedMeasureItems = measureItems.filter(
+    (item) => !cachedMeasureResults.has(item.measure.id)
+  );
+  const missingItemCount =
+    uncachedCandidateItems.length + uncachedMeasureItems.length;
+
+  if (missingItemCount === 0) {
+    await recordAppEvent({
+      category: "research",
+      event: "research_item_cache_hit",
+      route: "/api/research",
+      userId: user.id,
+      details: { itemCount: totalItems },
+    });
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        function send(data: Record<string, unknown>) {
+          controller.enqueue(encoder.encode(JSON.stringify(data) + "\n"));
+        }
+
+        for (const item of researchItems) {
+          const result = cachedCandidateResults.get(item.candidate.id);
+          if (!result) continue;
+          send({
+            type: "candidate_start",
+            candidateId: result.candidateId,
+            name: result.name,
+            race: result.race,
+          });
+          send({
+            type: "candidate_result",
+            candidateId: result.candidateId,
+            result,
+          });
+        }
+
+        for (const item of measureItems) {
+          const result = cachedMeasureResults.get(item.measure.id);
+          if (!result) continue;
+          send({
+            type: "measure_start",
+            measureId: result.measureId,
+            title: result.title,
+          });
+          send({
+            type: "measure_result",
+            measureId: result.measureId,
+            result,
+          });
+        }
+
+        send({ type: "done" });
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Transfer-Encoding": "chunked",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
   const quotaRules = getResearchQuotaRules(totalItems);
   let quotaFailure: QuotaResult | null;
   try {
@@ -331,9 +479,16 @@ export async function POST(request: NextRequest) {
       supabase,
       [
         { rule: quotaRules[0], incrementBy: 1 },
-        { rule: quotaRules[1], incrementBy: totalItems },
+        { rule: quotaRules[1], incrementBy: missingItemCount },
       ]
     );
+    const ipQuotaFailure = await enforceQuotaRules(
+      admin ?? supabase,
+      buildScopedIpQuotaRules(request, quotaRules)
+    );
+    if (ipQuotaFailure) {
+      quotaFailure = ipQuotaFailure;
+    }
   } catch (err) {
     await recordAppEvent({
       category: "research",
@@ -402,11 +557,56 @@ export async function POST(request: NextRequest) {
       const collectedMeasureResults: MeasureResult[] = [];
       let hasFailures = false;
 
-      const candidateTasks = researchItems.map(
+      for (const item of researchItems) {
+        const cachedResult = cachedCandidateResults.get(item.candidate.id);
+        if (!cachedResult) continue;
+
+        send({
+          type: "candidate_start",
+          candidateId: cachedResult.candidateId,
+          name: cachedResult.name,
+          race: cachedResult.race,
+        });
+        send({
+          type: "candidate_result",
+          candidateId: cachedResult.candidateId,
+          result: cachedResult,
+        });
+        collectedResults.push(cachedResult);
+      }
+
+      for (const item of measureItems) {
+        const cachedResult = cachedMeasureResults.get(item.measure.id);
+        if (!cachedResult) continue;
+
+        send({
+          type: "measure_start",
+          measureId: cachedResult.measureId,
+          title: cachedResult.title,
+        });
+        send({
+          type: "measure_result",
+          measureId: cachedResult.measureId,
+          result: cachedResult,
+        });
+        collectedMeasureResults.push(cachedResult);
+      }
+
+      const candidateTasks = uncachedCandidateItems.map(
         (item) => async () => {
           const candidateId = item.candidate.id;
           const candidateName = item.candidate.name;
           const raceName = item.race.name;
+          const dossierKey = buildCandidateDossierKey(
+            item.candidate,
+            item.race,
+            item.state
+          );
+          const personalizationKey = buildCandidatePersonalizationCacheKey({
+            dossierKey,
+            valuesProfileHash,
+            mode: "full",
+          });
 
           send({
             type: "candidate_start",
@@ -429,6 +629,7 @@ export async function POST(request: NextRequest) {
             });
             const result = await personalizeCandidateDossier(item, dossier, "full");
             if (!isValidCandidateResult(result)) {
+              hasFailures = true;
               send({
                 type: "candidate_error",
                 candidateId,
@@ -448,6 +649,16 @@ export async function POST(request: NextRequest) {
               result: normalizedResult,
             });
             collectedResults.push(normalizedResult);
+            if (admin) {
+              void saveCandidatePersonalizationCache(
+                admin,
+                personalizationKey,
+                `${candidateName} • ${raceName}`,
+                normalizedResult
+              ).catch(() => {
+                // Best-effort shared result cache only.
+              });
+            }
           } catch (err) {
             const message =
               err instanceof Error ? err.message : "Research failed";
@@ -475,10 +686,15 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      const measureTasks = measureItems.map(
+      const measureTasks = uncachedMeasureItems.map(
         (item) => async () => {
           const measureId = item.measure.id;
           const measureTitle = item.measure.title;
+          const dossierKey = buildMeasureDossierKey(item.measure, item.state);
+          const personalizationKey = buildMeasurePersonalizationCacheKey({
+            dossierKey,
+            valuesProfileHash,
+          });
 
           send({
             type: "measure_start",
@@ -520,6 +736,16 @@ export async function POST(request: NextRequest) {
               result: normalizedResult,
             });
             collectedMeasureResults.push(normalizedResult);
+            if (admin) {
+              void saveMeasurePersonalizationCache(
+                admin,
+                personalizationKey,
+                measureTitle,
+                normalizedResult
+              ).catch(() => {
+                // Best-effort shared result cache only.
+              });
+            }
           } catch (err) {
             const message =
               err instanceof Error ? err.message : "Research failed";

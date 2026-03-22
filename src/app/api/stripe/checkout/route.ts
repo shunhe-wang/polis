@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductConfig, getProductPriceId } from "@/lib/billing";
 import { getStripeClient } from "@/lib/stripe";
+import { getAccountTrustStatus } from "@/lib/account-trust";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -32,6 +33,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Authentication required" },
       { status: 401 }
+    );
+  }
+
+  const trust = getAccountTrustStatus(user);
+  if (!trust.trusted) {
+    return NextResponse.json(
+      { error: trust.reason },
+      { status: 403 }
     );
   }
 

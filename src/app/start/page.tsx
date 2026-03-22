@@ -41,6 +41,10 @@ export default function StartPage() {
             you go. If you continue as a guest, you can still build your ballot
             before deciding to create an account.
           </p>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground">
+            Free accounts unlock candidate links and one starter analysis. Full
+            guide research unlocks per ballot with a paid pass.
+          </p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">

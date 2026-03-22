@@ -79,6 +79,16 @@ export function getStarterAnalysisLimit(): number {
   return parsePositiveInt(process.env.FREE_STARTER_ANALYSES, 1);
 }
 
+export function getStarterAnalysisIpQuotaRules(): QuotaRule[] {
+  return [
+    {
+      scope: "starter_analysis_requests_day",
+      windowMs: 24 * 60 * 60 * 1000,
+      maxUnits: parsePositiveInt(process.env.STARTER_ANALYSES_PER_IP_DAY, 4),
+    },
+  ];
+}
+
 export function getStarterAnalysisWindowStart(): Date {
   return new Date(STARTER_ANALYSIS_WINDOW_START);
 }

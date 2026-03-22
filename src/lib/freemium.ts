@@ -3,6 +3,9 @@ export type UserTier = "guest" | "free" | "pro";
 export interface AccountSummary {
   tier: UserTier;
   isAuthenticated: boolean;
+  trustedAccount: boolean;
+  emailVerified: boolean;
+  trustReason: string | null;
   planKey: "guest" | "free" | "election_pass" | "bundle_3" | "power_14d";
   planLabel: string;
   starterAnalysesRemaining: number;
@@ -15,6 +18,9 @@ export interface AccountSummary {
 export const DEFAULT_ACCOUNT_SUMMARY: AccountSummary = {
   tier: "guest",
   isAuthenticated: false,
+  trustedAccount: false,
+  emailVerified: false,
+  trustReason: null,
   planKey: "guest",
   planLabel: "Guest",
   starterAnalysesRemaining: 0,

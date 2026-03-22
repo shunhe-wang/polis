@@ -4,7 +4,9 @@ import { getAccountPlan, getCurrentEntitlements } from "@/lib/billing";
 import {
   enforceStarterAnalysisQuota,
   getStarterAnalysisLimit,
+  getStarterAnalysisIpQuotaRules,
   getStarterAnalysisRemaining,
+  enforceQuotaRules,
 } from "@/lib/ai-quotas";
 import {
   personalizeCandidateDossier,
@@ -18,8 +20,15 @@ import {
   loadCandidateDossier,
   saveCandidateDossier,
 } from "@/lib/research-dossiers";
+import {
+  buildCandidatePersonalizationCacheKey,
+  loadCandidatePersonalizationCache,
+  saveCandidatePersonalizationCache,
+} from "@/lib/research-item-cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordAppEvent } from "@/lib/observability";
+import { getAccountTrustStatus } from "@/lib/account-trust";
+import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import {
   isValidCandidate,
   isValidCandidateDossier,
@@ -84,6 +93,14 @@ export async function POST(request: NextRequest) {
           "Create a free account to unlock your starter candidate analysis.",
       },
       { status: 401 }
+    );
+  }
+
+  const trust = getAccountTrustStatus(user);
+  if (!trust.trusted) {
+    return NextResponse.json(
+      { error: trust.reason ?? "This account cannot use starter analysis yet." },
+      { status: 403 }
     );
   }
 
@@ -160,6 +177,21 @@ export async function POST(request: NextRequest) {
 
   if (tier === "free") {
     try {
+      const ipQuotaFailure = await enforceQuotaRules(
+        createAdminClient() ?? supabase,
+        buildScopedIpQuotaRules(request, getStarterAnalysisIpQuotaRules())
+      );
+      if (ipQuotaFailure) {
+        return NextResponse.json(
+          {
+            error:
+              "Starter analysis is temporarily rate limited on this connection. Try again later or sign in from your normal device.",
+            starterAnalysesRemaining: await getStarterAnalysisRemaining(supabase),
+          },
+          { status: 429 }
+        );
+      }
+
       const quotaFailure = await enforceStarterAnalysisQuota(supabase);
       if (quotaFailure) {
         await recordAppEvent({
@@ -217,6 +249,11 @@ export async function POST(request: NextRequest) {
       body.race,
       body.state
     );
+    const personalizationKey = buildCandidatePersonalizationCacheKey({
+      dossierKey,
+      valuesProfileHash,
+      mode: "starter",
+    });
 
     let dossier = admin
       ? await loadCandidateDossier(admin, dossierKey)
@@ -251,11 +288,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const result = await personalizeCandidateDossier(
-      researchRequest,
-      dossier,
-      "starter"
-    );
+    const cachedPersonalized = admin
+      ? await loadCandidatePersonalizationCache(admin, personalizationKey)
+      : null;
+    const result =
+      cachedPersonalized && isValidCandidateResult(cachedPersonalized)
+        ? cachedPersonalized
+        : await personalizeCandidateDossier(
+            researchRequest,
+            dossier,
+            "starter"
+          );
 
     const sanitizedResult = sanitizeCandidateResult({
       ...result,
@@ -273,6 +316,17 @@ export async function POST(request: NextRequest) {
       tier === "free"
         ? await getStarterAnalysisRemaining(supabase)
         : getStarterAnalysisLimit();
+
+    if (admin && (!cachedPersonalized || !isValidCandidateResult(cachedPersonalized))) {
+      void saveCandidatePersonalizationCache(
+        admin,
+        personalizationKey,
+        `${body.candidate.name} • ${body.race.name} • starter`,
+        sanitizedResult
+      ).catch(() => {
+        // Best-effort shared result cache only.
+      });
+    }
 
     await supabase.from("starter_candidate_analyses").upsert(
       {

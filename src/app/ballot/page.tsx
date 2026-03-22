@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AddressLookup } from "@/components/ballot/address-lookup";
 import { RaceEditor } from "@/components/ballot/race-editor";
+import { buildBallotFallbackLinks, getBallotSourceNotice } from "@/lib/ballot-fallbacks";
 import {
   hydrateValuesProfile,
   type Race,
@@ -205,6 +206,11 @@ export default function BallotPage() {
   const canContinue =
     (races.length > 0 && races.some((r) => r.candidates.length > 0)) ||
     measures.length > 0;
+  const ballotFallbackLinks = buildBallotFallbackLinks({
+    address,
+    state,
+    election,
+  });
 
   const handleContinue = () => {
     if (!valuesProfile) return;
@@ -288,6 +294,23 @@ export default function BallotPage() {
           </div>
         )}
 
+        {!returnToGuide && account.tier !== "guest" && (
+          <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <p className="text-sm font-medium">
+              {account.tier === "free"
+                ? "Free plan: ballot, links, and 1 starter analysis"
+                : "Pass unlocked: full guide available for this ballot"}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {account.tier === "free"
+                ? account.trustedAccount
+                  ? "Continue to the guide to browse candidate links and spend your one free starter analysis on the candidate you care about most."
+                  : account.trustReason ?? "Verify your email to unlock AI features."
+                : "Continue to the guide when you are ready to run the full personalized analysis."}
+            </p>
+          </div>
+        )}
+
         {/* Address Lookup */}
         <Card>
           <CardContent className="pt-6">
@@ -319,6 +342,28 @@ export default function BallotPage() {
               <p className="mb-4 text-sm text-muted-foreground">
                 Showing results for <span className="font-medium">{state}</span>
               </p>
+            )}
+
+            {(state || lookupError || races.length > 0 || measures.length > 0) && (
+              <div className="mb-4 rounded-lg border border-black/5 bg-background/70 p-4 text-sm dark:border-white/10">
+                <p className="font-medium">Verify this ballot against an official sample ballot</p>
+                <p className="mt-1 text-muted-foreground">
+                  {getBallotSourceNotice(races.length, measures.length, election)}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {ballotFallbackLinks.map((link) => (
+                    <a
+                      key={link.label}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center rounded-full border border-black/10 px-3 py-1.5 text-xs font-medium text-foreground/80 transition hover:bg-muted dark:border-white/10"
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
             )}
 
             {availableElections.length > 1 && !election && (
@@ -457,7 +502,9 @@ export default function BallotPage() {
               : account.tier === "guest"
               ? "Continue to Account Options"
               : account.tier === "free"
-                ? "Browse Candidates & Use Free Analysis"
+                ? account.trustedAccount
+                  ? "Browse Candidates & Use Free Analysis"
+                  : "Verify Email to Unlock Guide Features"
                 : "Generate Voter Guide"}
           </Button>
         </div>

@@ -31,8 +31,8 @@ export function MeasureCard({ result }: MeasureCardProps) {
       <CardContent className="pt-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
-            <h4 className="text-sm font-semibold">{result.title}</h4>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <h4 className="text-base font-semibold tracking-tight">{result.title}</h4>
+            <p className="mt-2 text-sm text-muted-foreground">
               {result.summary}
             </p>
           </div>
@@ -116,9 +116,11 @@ export function MeasureCard({ result }: MeasureCardProps) {
               : "How We Decided This"}
           </button>
           {showReasoning && (
-            <p className="mt-2 text-sm text-muted-foreground whitespace-pre-line">
-              {result.reasoning}
-            </p>
+            <div className="mt-3 rounded-2xl border border-black/5 bg-background/75 p-4 dark:border-white/10">
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {result.reasoning}
+              </p>
+            </div>
           )}
         </div>
       </CardContent>

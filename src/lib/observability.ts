@@ -10,10 +10,19 @@ export interface AppEventInput {
 }
 
 export async function recordAppEvent(input: AppEventInput): Promise<void> {
+  const logLine = JSON.stringify({
+    level: input.severity ?? "info",
+    category: input.category,
+    event: input.event,
+    route: input.route ?? null,
+    userId: input.userId ?? null,
+    details: input.details ?? {},
+  });
+
   const admin = createAdminClient();
   if (!admin) {
     if (input.severity === "error") {
-      console.error("[app-event]", input);
+      process.stderr.write(`${logLine}\n`);
     }
     return;
   }
@@ -28,6 +37,18 @@ export async function recordAppEvent(input: AppEventInput): Promise<void> {
   });
 
   if (error && input.severity === "error") {
-    console.error("[app-event-insert-failed]", error.message, input);
+    process.stderr.write(
+      `${JSON.stringify({
+        level: "error",
+        category: "observability",
+        event: "app_event_insert_failed",
+        route: input.route ?? null,
+        userId: input.userId ?? null,
+        details: {
+          ...input.details,
+          insertError: error.message,
+        },
+      })}\n`
+    );
   }
 }

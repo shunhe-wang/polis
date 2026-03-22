@@ -7,6 +7,7 @@ import {
   isStripeConfigured,
 } from "@/lib/billing";
 import { getStarterAnalysisLimit, getStarterAnalysisRemaining } from "@/lib/ai-quotas";
+import { getAccountTrustStatus } from "@/lib/account-trust";
 
 export async function getAccountSummaryForUser(
   supabase: SupabaseClient,
@@ -18,8 +19,9 @@ export async function getAccountSummaryForUser(
 
   const entitlements = await getCurrentEntitlements(supabase, user.id);
   const plan = getAccountPlan(user, entitlements);
+  const trust = getAccountTrustStatus(user);
   const starterAnalysesRemaining =
-    plan.tier === "free"
+    plan.tier === "free" && trust.trusted
       ? await getStarterAnalysisRemaining(supabase)
       : plan.tier === "pro"
         ? getStarterAnalysisLimit()
@@ -28,6 +30,9 @@ export async function getAccountSummaryForUser(
   return {
     tier: plan.tier,
     isAuthenticated: true,
+    trustedAccount: trust.trusted,
+    emailVerified: trust.emailVerified,
+    trustReason: trust.reason,
     planKey: plan.planKey,
     planLabel: plan.planLabel,
     starterAnalysesRemaining,

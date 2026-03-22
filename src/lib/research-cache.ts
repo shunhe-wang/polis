@@ -25,13 +25,17 @@ export function buildStarterAnalysisHashes(
   ballotInput: BallotInput
 ): { valuesProfileHash: string; ballotHash: string } {
   return {
-    valuesProfileHash: createHash("sha256")
-      .update(JSON.stringify(valuesProfile))
-      .digest("hex"),
+    valuesProfileHash: buildValuesProfileHash(valuesProfile),
     ballotHash: createHash("sha256")
       .update(JSON.stringify(ballotInput))
       .digest("hex"),
   };
+}
+
+export function buildValuesProfileHash(valuesProfile: ValuesProfile): string {
+  return createHash("sha256")
+    .update(JSON.stringify(valuesProfile))
+    .digest("hex");
 }
 
 export function buildBallotHash(ballotInput: BallotInput): string {
