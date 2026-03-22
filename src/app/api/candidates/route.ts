@@ -9,6 +9,11 @@ import { getAccountTrustStatus } from "@/lib/account-trust";
 import { getAccountPlan, getCurrentEntitlements } from "@/lib/billing";
 import { canAccessFeature } from "@/lib/freemium";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
+import { lookupGoogleCivicBallot } from "@/lib/ballot-sources/google-civic";
+import {
+  classifyDeterministicStatewideRace,
+  findDeterministicStatewideCandidates,
+} from "@/lib/deterministic-candidate-lookup";
 
 const anthropic = new Anthropic();
 
@@ -86,6 +91,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     typeof body.locality === "string" && body.locality.trim().length <= 120
       ? body.locality.trim()
       : "";
+  const address =
+    typeof body.address === "string" && body.address.trim().length <= 300
+      ? body.address.trim()
+      : "";
+  const electionId =
+    typeof body.electionId === "string" && body.electionId.trim().length > 0
+      ? body.electionId.trim()
+      : null;
 
   if (!state) {
     return NextResponse.json(
@@ -99,6 +112,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
+    const requestedDeterministicRace =
+      classifyDeterministicStatewideRace(raceName);
+    if (requestedDeterministicRace && address) {
+      try {
+        const civic = await lookupGoogleCivicBallot({ address, electionId });
+        const deterministicCandidates = findDeterministicStatewideCandidates(
+          civic.races,
+          raceName
+        );
+        if (deterministicCandidates && deterministicCandidates.length > 0) {
+          return NextResponse.json({
+            candidates: deterministicCandidates.map((candidate) => ({
+              name: candidate.name,
+              party: candidate.party,
+            })),
+            error: null,
+          } satisfies CandidateLookupResult);
+        }
+      } catch {
+        // If the deterministic path fails, fall back to the paid AI lookup.
+      }
+    }
+
     const quotaRules = getCandidateLookupQuotaRules();
     const quotaFailure = await enforceQuotaRules(
       supabase,

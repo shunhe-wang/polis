@@ -96,6 +96,19 @@ async function runWithConcurrencyLimit(
   );
 }
 
+function getResearchConcurrency(): number {
+  const parsed = Number.parseInt(
+    process.env.RESEARCH_CONCURRENCY ?? "10",
+    10
+  );
+
+  if (!Number.isFinite(parsed)) {
+    return 10;
+  }
+
+  return Math.min(Math.max(parsed, 1), 12);
+}
+
 async function getCandidateDossier(
   req: ResearchRequest
 ): Promise<CandidateDossier> {
@@ -756,7 +769,7 @@ export async function POST(request: NextRequest) {
       );
 
       const tasks = [...candidateTasks, ...measureTasks];
-      await runWithConcurrencyLimit(tasks, 3);
+      await runWithConcurrencyLimit(tasks, getResearchConcurrency());
 
       if (
         !hasFailures &&

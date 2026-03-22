@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { CandidateCard } from "./candidate-card";
 import { CollapsibleContent } from "./collapsible-content";
 import type { CandidateResult } from "@/lib/types";
+import { rankRaceCandidates } from "@/lib/race-recommendations";
 
 interface RaceSectionProps {
   sectionId?: string;
@@ -22,12 +23,13 @@ export function RaceSection({
   compactMode = false,
 }: RaceSectionProps) {
   const [isCollapsed, setIsCollapsed] = useState(compactMode);
-  // Sort by alignment score descending
-  const sorted = [...candidates].sort(
-    (a, b) => b.alignmentScore - a.alignmentScore
-  );
-
-  const recommended = sorted.length > 0 ? sorted[0] : null;
+  const {
+    sortedCandidates: sorted,
+    recommended,
+    runnerUp,
+    hasCloseCall,
+    explanation,
+  } = rankRaceCandidates(candidates);
   const hasStrongRecommendation =
     recommended &&
     recommended.confidence !== "low" &&
@@ -46,6 +48,11 @@ export function RaceSection({
             {hasStrongRecommendation && (
               <Badge variant="secondary" className="text-xs">
                 Clear recommendation
+              </Badge>
+            )}
+            {hasCloseCall && sorted.length > 1 && (
+              <Badge variant="outline" className="text-xs">
+                Close call
               </Badge>
             )}
             <Badge variant="outline" className="text-xs">
@@ -68,9 +75,15 @@ export function RaceSection({
           {recommended && (
             <p className="max-w-2xl text-sm text-muted-foreground">
               Top match right now:{" "}
-              <span className="font-medium text-foreground">{recommended.name}</span>
-              {" "}at {recommended.alignmentScore}/100.
-              {recommended.reasoning ? ` ${recommended.reasoning.split("\n")[0]}` : ""}
+              <span className="font-medium text-foreground">
+                {recommended.name}
+              </span>{" "}
+              at {recommended.alignmentScore}/100.
+              {runnerUp && hasCloseCall
+                ? ` ${explanation}`
+                : recommended.reasoning
+                  ? ` ${recommended.reasoning.split("\n")[0]}`
+                  : ""}
             </p>
           )}
         </div>

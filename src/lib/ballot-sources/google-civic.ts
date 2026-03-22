@@ -396,7 +396,7 @@ export async function lookupGoogleCivicBallot(input: {
 
   return {
     error:
-      "No upcoming elections found for this address. You can add races and candidates manually below.",
+      "No upcoming elections found for this address right now. You can add races and candidates manually below, or check back later as election data becomes available.",
     state: null,
     election: null,
     availableElections: [],

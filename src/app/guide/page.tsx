@@ -16,6 +16,7 @@ import {
 import { getAccountSummary } from "@/lib/account-client";
 import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
 import { syncFromSupabase } from "@/lib/persistence";
+import { buildRaceRecommendation } from "@/lib/race-recommendations";
 import type {
   ValuesProfile,
   BallotInput,
@@ -62,6 +63,7 @@ export default function GuidePage() {
   const [compactMode, setCompactMode] = useState(false);
   const [guideAccess, setGuideAccess] = useState<GuideAccessState | null>(null);
   const skipCacheRef = useRef(false);
+  const prefetchedBallotKeysRef = useRef<Set<string>>(new Set());
 
   const {
     statuses,
@@ -230,21 +232,15 @@ export default function GuidePage() {
     }
 
     for (const [raceName, candidates] of grouped) {
-      const sorted = [...candidates].sort(
-        (a, b) => b.alignmentScore - a.alignmentScore
-      );
-      const recommended = sorted[0];
       const raceId =
         raceIdByCandidateId.get(candidates[0].candidateId) ?? raceName;
-      recommendations.push({
-        raceId,
-        raceName,
-        candidates: sorted,
-        recommendedCandidateId:
-          recommended.confidence !== "low" ? recommended.candidateId : null,
-        confidence: recommended.confidence,
-        explanation: recommended.reasoning,
-      });
+      recommendations.push(
+        buildRaceRecommendation({
+          raceId,
+          raceName,
+          candidates,
+        })
+      );
     }
 
     try {
@@ -287,6 +283,58 @@ export default function GuidePage() {
       setIsSaving(false);
     }
   }, [valuesProfile, ballotInput, results, measureResults, raceIdByCandidateId]);
+
+  useEffect(() => {
+    if (
+      !tierLoaded ||
+      !ballotInput ||
+      !account.isAuthenticated ||
+      !account.trustedAccount ||
+      !guideAccess ||
+      guideAccess?.unlocked
+    ) {
+      return;
+    }
+
+    const itemCount =
+      ballotInput.races.reduce(
+        (total, race) => total + race.candidates.length,
+        0
+      ) + ballotInput.measures.length;
+    if (itemCount === 0 || ballotInput.importMeta?.status === "unavailable") {
+      return;
+    }
+
+    const ballotKey = JSON.stringify({
+      address: ballotInput.address,
+      state: ballotInput.state,
+      electionId: ballotInput.election?.id ?? null,
+      itemCount,
+    });
+    if (prefetchedBallotKeysRef.current.has(ballotKey)) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      prefetchedBallotKeysRef.current.add(ballotKey);
+      void fetch("/api/research/prefetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ballotInput }),
+      }).catch(() => {
+        prefetchedBallotKeysRef.current.delete(ballotKey);
+      });
+    }, 2500);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    tierLoaded,
+    ballotInput,
+    account.isAuthenticated,
+    account.trustedAccount,
+    guideAccess,
+    guideAccess?.unlocked,
+  ]);
 
   const handleStarterAnalysis = useCallback(
     async (candidate: Candidate, race: Race) => {

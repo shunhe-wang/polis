@@ -14,6 +14,8 @@ interface RaceEditorProps {
   onRacesChange: (races: Race[]) => void;
   state?: string | null;
   locality?: string | null;
+  address?: string | null;
+  electionId?: string | null;
   userTier: UserTier;
   canLookupCandidates: boolean;
 }
@@ -129,6 +131,8 @@ export function RaceEditor({
   onRacesChange,
   state,
   locality,
+  address,
+  electionId,
   userTier,
   canLookupCandidates,
 }: RaceEditorProps) {
@@ -171,6 +175,8 @@ export function RaceEditor({
           raceName,
           state: state ?? "",
           locality: locality ?? "",
+          address: address ?? "",
+          electionId,
         }),
       });
       const data = await res.json();

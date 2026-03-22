@@ -104,6 +104,15 @@ export default function BallotPage() {
   const [account, setAccount] = useState<AccountSummary>(
     DEFAULT_ACCOUNT_SUMMARY
   );
+  const manualLookupAddress = [
+    addressDraft.streetAddress,
+    addressDraft.city,
+    addressDraft.state,
+    addressDraft.zipCode,
+  ]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(", ");
 
   useEffect(() => {
     async function load() {
@@ -551,9 +560,6 @@ export default function BallotPage() {
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
                 <p className="font-medium">Lookup note</p>
                 <p className="mt-1">{lookupError}</p>
-                <p className="mt-2 text-xs">
-                  You can manually add races and candidates below.
-                </p>
               </div>
             )}
 
@@ -700,6 +706,8 @@ export default function BallotPage() {
               onRacesChange={setRaces}
               state={state ?? (addressDraft.state || null)}
               locality={addressDraft.city || null}
+              address={address || manualLookupAddress || null}
+              electionId={election?.id ?? null}
               userTier={account.tier}
               canLookupCandidates={account.tier === "pro" && account.trustedAccount}
             />

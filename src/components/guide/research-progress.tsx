@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import type {
   CandidateStatus,
   MeasureStatus,
@@ -21,14 +22,30 @@ export function ResearchProgress({
   if (candidates.length === 0 && measures.length === 0) return null;
 
   const totalItems = candidates.length + measures.length;
+  const completedItems = [...candidates, ...measures].filter(
+    (status) => status.state === "complete" || status.state === "error"
+  ).length;
+  const progressValue =
+    totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
   return (
     <div className="space-y-3">
       {totalItems > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Each item is individually researched with live web sources for accuracy.
-          {totalItems > 4 ? " With a full ballot, this can take a few minutes." : ""}
-        </p>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">Research progress</span>
+            <span className="text-muted-foreground">
+              {completedItems}/{totalItems}
+            </span>
+          </div>
+          <Progress value={progressValue} />
+          <p className="text-xs text-muted-foreground">
+            Each item is individually researched with live web sources for accuracy.
+            {totalItems > 4
+              ? " A full ballot still takes a few minutes, but Polis now shows how many items are finished."
+              : ""}
+          </p>
+        </div>
       )}
       {candidates.length > 0 && (
         <>

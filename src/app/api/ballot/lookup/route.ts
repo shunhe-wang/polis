@@ -55,7 +55,7 @@ function inferImportStatus(input: {
       status: "unavailable",
       confidence: 20,
       message:
-        "Google Civic did not return a ballot for this address. Check an official election source or add races manually.",
+        "Google Civic did not return a ballot for this address yet. Check an official election source, add races manually, or come back later as election data becomes available.",
     };
   }
 

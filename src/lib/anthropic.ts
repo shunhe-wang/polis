@@ -411,7 +411,7 @@ export function runCandidateDossierResearch(
     model: "claude-haiku-4-5-20251001",
     maxTokens: 2600,
     prompt: buildCandidateDossierPrompt(req.candidate, req.race, req.state),
-    webSearchMaxUses: 5,
+    webSearchMaxUses: 2,
     parseError: "Could not parse candidate dossier",
   });
 }
@@ -446,7 +446,7 @@ export function runMeasureDossierResearch(
     model: "claude-haiku-4-5-20251001",
     maxTokens: 2600,
     prompt: buildMeasureDossierPrompt(req.measure, req.state),
-    webSearchMaxUses: 5,
+    webSearchMaxUses: 2,
     parseError: "Could not parse measure dossier",
   });
 }
