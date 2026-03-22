@@ -28,7 +28,9 @@ export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
           Enter your full address or just a zip code to find your voting
           districts and the candidates on your ballot. It stays in your
           browser unless you sign in, in which case it can be saved to your
-          account so you can resume later.
+          account so you can resume later. If public election data is
+          incomplete, we will show official fallback links and let you finish
+          the ballot manually.
         </p>
         <Input
           id="address"

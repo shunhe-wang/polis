@@ -1,10 +1,4 @@
-import type { BallotElectionContext } from "@/lib/types";
-
-export interface BallotFallbackLink {
-  label: string;
-  url: string;
-  kind: "official_search" | "reference" | "news";
-}
+import type { BallotElectionContext, BallotFallbackLink } from "@/lib/types";
 
 function encodeSearch(query: string): string {
   return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
@@ -22,6 +16,16 @@ export function buildBallotFallbackLinks(input: {
   const newsQuery = `"${location}" "${electionLabel}" candidate guide`;
 
   return [
+    {
+      label: "USA.gov election office directory",
+      url: "https://www.usa.gov/state-election-office",
+      kind: "official",
+    },
+    {
+      label: "Vote.gov election resources",
+      url: "https://vote.gov",
+      kind: "official",
+    },
     {
       label: "Search official sample ballot",
       url: encodeSearch(officialQuery),

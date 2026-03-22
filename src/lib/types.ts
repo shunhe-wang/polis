@@ -230,6 +230,27 @@ export interface BallotMeasure {
   type: 'referendum' | 'initiative' | 'amendment' | 'other';
 }
 
+export interface BallotFallbackLink {
+  label: string;
+  url: string;
+  kind: 'official_search' | 'reference' | 'news' | 'official';
+}
+
+export interface BallotImportMeta {
+  importId: string | null;
+  source: 'google_civic' | 'official_upload' | 'manual' | 'licensed_provider';
+  status: 'complete' | 'partial' | 'unavailable';
+  confidence: number;
+  message: string | null;
+  fallbackLinks: BallotFallbackLink[];
+  locality: {
+    city: string | null;
+    county: string | null;
+    state: string | null;
+    zip: string | null;
+  } | null;
+}
+
 export interface BallotElectionContext {
   id: string;
   name: string;
@@ -242,8 +263,34 @@ export interface BallotInput {
   address: string;
   state: string;
   election: BallotElectionContext | null;
+  importMeta?: BallotImportMeta | null;
   races: Race[];
   measures: BallotMeasure[];
+}
+
+export interface BallotReviewDraft {
+  election: {
+    name: string | null;
+    electionDay: string | null;
+    kind: BallotElectionContext["kind"] | null;
+    selectedParty: string | null;
+  } | null;
+  races: Array<{
+    name: string;
+    level: Race["level"];
+    contestType: string | null;
+    candidates: Array<{
+      name: string;
+      party: string | null;
+    }>;
+  }>;
+  measures: Array<{
+    title: string;
+    description: string;
+    type: BallotMeasure["type"];
+  }>;
+  confidence: number;
+  notes: string[];
 }
 
 // ─── AI Research Results ───────────────────────────────────────────

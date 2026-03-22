@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createEmptyValuesProfile, type BallotInput, type CandidateResult } from "@/lib/types";
 import {
   isValidBallotInput,
+  isValidBallotReviewDraft,
   isValidCandidateResult,
   isValidValuesProfile,
 } from "@/lib/validation";
@@ -98,5 +99,38 @@ describe("validation", () => {
     expect(
       isValidCandidateResult({ ...result, alignmentScore: 120 })
     ).toBe(false);
+  });
+
+  it("accepts a valid ballot review draft", () => {
+    expect(
+      isValidBallotReviewDraft({
+        election: {
+          name: "Virginia General Election",
+          electionDay: "2026-11-03",
+          kind: "general",
+          selectedParty: null,
+        },
+        races: [
+          {
+            name: "Governor",
+            level: "state",
+            contestType: "General",
+            candidates: [
+              { name: "Jane Doe", party: "Democrat" },
+              { name: "John Roe", party: "Republican" },
+            ],
+          },
+        ],
+        measures: [
+          {
+            title: "Amendment 1",
+            description: "Would change redistricting rules.",
+            type: "amendment",
+          },
+        ],
+        confidence: 82,
+        notes: ["Candidate parties should be verified."],
+      })
+    ).toBe(true);
   });
 });

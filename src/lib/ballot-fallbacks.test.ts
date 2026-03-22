@@ -18,8 +18,8 @@ describe("ballot fallback links", () => {
       },
     });
 
-    expect(links).toHaveLength(5);
-    expect(links[0]?.label).toContain("official");
+    expect(links).toHaveLength(7);
+    expect(links[0]?.label).toContain("USA.gov");
     expect(links.some((link) => link.url.includes("vote411.org"))).toBe(true);
   });
 

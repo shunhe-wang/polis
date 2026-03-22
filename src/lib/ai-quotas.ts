@@ -93,6 +93,21 @@ export function getStarterAnalysisWindowStart(): Date {
   return new Date(STARTER_ANALYSIS_WINDOW_START);
 }
 
+export function getBallotParseQuotaRules(): QuotaRule[] {
+  return [
+    {
+      scope: "ballot_parse_requests_10m",
+      windowMs: 10 * 60 * 1000,
+      maxUnits: parsePositiveInt(process.env.BALLOT_PARSE_REQUESTS_PER_10M, 3),
+    },
+    {
+      scope: "ballot_parse_requests_day",
+      windowMs: 24 * 60 * 60 * 1000,
+      maxUnits: parsePositiveInt(process.env.BALLOT_PARSE_REQUESTS_PER_DAY, 10),
+    },
+  ];
+}
+
 async function readQuotaUnits(
   supabase: SupabaseClient,
   scope: string,

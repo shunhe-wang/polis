@@ -4,14 +4,16 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { AddressLookup } from "@/components/ballot/address-lookup";
 import { RaceEditor } from "@/components/ballot/race-editor";
-import { buildBallotFallbackLinks, getBallotSourceNotice } from "@/lib/ballot-fallbacks";
 import {
   hydrateValuesProfile,
   type Race,
   type BallotMeasure,
   type BallotElectionContext,
+  type BallotImportMeta,
+  type BallotReviewDraft,
   type ValuesProfile,
   type BallotInput,
 } from "@/lib/types";
@@ -26,6 +28,7 @@ interface CivicApiResponse {
   availableElections: BallotElectionContext[];
   requiresElectionSelection: boolean;
   primaryParties: string[];
+  importMeta: BallotImportMeta;
   races: Race[];
   measures: BallotMeasure[];
   error: string | null;
@@ -65,6 +68,7 @@ export default function BallotPage() {
   const [availableElections, setAvailableElections] = useState<
     BallotElectionContext[]
   >([]);
+  const [importMeta, setImportMeta] = useState<BallotImportMeta | null>(null);
   const [importedRaces, setImportedRaces] = useState<Race[]>([]);
   const [primaryParties, setPrimaryParties] = useState<string[]>([]);
   const [races, setRaces] = useState<Race[]>([]);
@@ -72,6 +76,11 @@ export default function BallotPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const [draftPreview, setDraftPreview] = useState<BallotInput | null>(null);
+  const [draftSummary, setDraftSummary] = useState<BallotReviewDraft | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [isParsingDraft, setIsParsingDraft] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [returnToGuide, setReturnToGuide] = useState(false);
@@ -102,6 +111,7 @@ export default function BallotPage() {
         setAddress(ballot.address);
         setState(ballot.state || null);
         setElection(ballot.election ?? null);
+        setImportMeta(ballot.importMeta ?? null);
         setRaces(ballot.races ?? []);
         setImportedRaces(ballot.races ?? []);
         setMeasures(ballot.measures ?? []);
@@ -110,6 +120,29 @@ export default function BallotPage() {
 
       const summary = await getAccountSummary();
       setAccount(summary);
+      if (summary.isAuthenticated) {
+        try {
+          const response = await fetch("/api/ballot/review-draft", {
+            cache: "no-store",
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (
+              data &&
+              typeof data === "object" &&
+              "normalizedBallot" in data &&
+              data.normalizedBallot
+            ) {
+              setDraftPreview(data.normalizedBallot as BallotInput);
+              setDraftSummary(
+                ("draft" in data ? data.draft : null) as BallotReviewDraft | null
+              );
+            }
+          }
+        } catch {
+          // Ignore draft preload failures.
+        }
+      }
       setHasHydrated(true);
     }
 
@@ -123,6 +156,7 @@ export default function BallotPage() {
       address,
       state: state ?? "",
       election,
+      importMeta,
       races,
       measures,
     };
@@ -142,7 +176,7 @@ export default function BallotPage() {
     }, 400);
 
     return () => window.clearTimeout(timeout);
-  }, [address, state, election, races, measures, hasHydrated]);
+  }, [address, state, election, importMeta, races, measures, hasHydrated]);
 
   const handleLookup = async (addr: string, selectedElectionId?: string) => {
     setAddress(addr);
@@ -157,7 +191,7 @@ export default function BallotPage() {
       if (selectedElectionId) {
         params.set("electionId", selectedElectionId);
       }
-      const res = await fetch(`/api/civic?${params.toString()}`);
+      const res = await fetch(`/api/ballot/lookup?${params.toString()}`);
       const data: CivicApiResponse = await res.json();
 
       if (!res.ok) {
@@ -167,6 +201,7 @@ export default function BallotPage() {
         setState(null);
         setElection(null);
         setAvailableElections([]);
+        setImportMeta(data.importMeta ?? null);
         setPrimaryParties([]);
         setImportedRaces([]);
         setRaces([]);
@@ -180,6 +215,7 @@ export default function BallotPage() {
 
       setState(data.state);
       setAvailableElections(data.availableElections ?? []);
+      setImportMeta(data.importMeta ?? null);
       if (data.requiresElectionSelection) {
         setElection(null);
         setPrimaryParties([]);
@@ -198,6 +234,7 @@ export default function BallotPage() {
       setLookupError(
         "Could not connect to the ballot lookup service. You can add races manually below."
       );
+      setImportMeta(null);
     } finally {
       setIsLoading(false);
     }
@@ -206,11 +243,6 @@ export default function BallotPage() {
   const canContinue =
     (races.length > 0 && races.some((r) => r.candidates.length > 0)) ||
     measures.length > 0;
-  const ballotFallbackLinks = buildBallotFallbackLinks({
-    address,
-    state,
-    election,
-  });
 
   const handleContinue = () => {
     if (!valuesProfile) return;
@@ -219,6 +251,7 @@ export default function BallotPage() {
       address,
       state: state ?? "",
       election,
+      importMeta,
       races,
       measures,
     };
@@ -238,6 +271,84 @@ export default function BallotPage() {
       return;
     }
     router.push("/guide");
+  };
+
+  const applyDraftBallot = (draftBallot: BallotInput) => {
+    const appliedImportMeta: BallotImportMeta | null = draftBallot.importMeta
+      ? {
+          ...draftBallot.importMeta,
+          fallbackLinks:
+            importMeta?.fallbackLinks ?? draftBallot.importMeta.fallbackLinks,
+          locality:
+            importMeta?.locality ?? draftBallot.importMeta.locality ?? null,
+        }
+      : importMeta;
+
+    const nextElection = draftBallot.election
+      ? {
+          ...draftBallot.election,
+          selectedParty:
+            draftBallot.election.selectedParty ?? election?.selectedParty ?? null,
+        }
+      : election;
+
+    setElection(nextElection);
+    setImportMeta(appliedImportMeta);
+    setImportedRaces(draftBallot.races ?? []);
+    setPrimaryParties([]);
+    setRaces(draftBallot.races ?? []);
+    setMeasures(draftBallot.measures ?? []);
+    if (draftBallot.state) {
+      setState(draftBallot.state);
+    }
+    setHasSearched(true);
+    setLookupError(null);
+  };
+
+  const handleParseDraft = async () => {
+    if (!draftText.trim()) return;
+
+    setIsParsingDraft(true);
+    setDraftError(null);
+    try {
+      const response = await fetch("/api/ballot/review-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ballotText: draftText,
+          state: state ?? "",
+        }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setDraftError(
+          data && typeof data === "object" && "error" in data
+            ? String(data.error)
+            : "Could not parse this ballot text."
+        );
+        return;
+      }
+
+      if (
+        !data ||
+        typeof data !== "object" ||
+        !("normalizedBallot" in data) ||
+        !data.normalizedBallot
+      ) {
+        setDraftError("Could not parse this ballot text.");
+        return;
+      }
+
+      setDraftPreview(data.normalizedBallot as BallotInput);
+      setDraftSummary(
+        ("draft" in data ? data.draft : null) as BallotReviewDraft | null
+      );
+    } catch {
+      setDraftError("Could not parse this ballot text.");
+    } finally {
+      setIsParsingDraft(false);
+    }
   };
 
   if (!valuesProfile) {
@@ -318,6 +429,77 @@ export default function BallotPage() {
           </CardContent>
         </Card>
 
+        {account.isAuthenticated && (
+          <Card className="mt-6">
+            <CardContent className="pt-6">
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-medium">Paste ballot text for review</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    If the official site shows your ballot but Google Civic is
+                    incomplete, paste the ballot text here. Polis will turn it
+                    into a reviewable draft you can apply below.
+                  </p>
+                </div>
+                {!account.trustedAccount ? (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100">
+                    {account.trustReason ??
+                      "Verify your email before using ballot text parsing."}
+                  </div>
+                ) : (
+                  <>
+                    <Textarea
+                      value={draftText}
+                      onChange={(event) => setDraftText(event.target.value)}
+                      placeholder="Paste the official ballot text here. Include the election title, each race, candidate names, and any ballot measures."
+                      rows={8}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={handleParseDraft}
+                        disabled={!draftText.trim() || isParsingDraft}
+                      >
+                        {isParsingDraft ? "Parsing..." : "Parse Ballot Text"}
+                      </Button>
+                      {draftPreview && (
+                        <Button
+                          variant="outline"
+                          onClick={() => applyDraftBallot(draftPreview)}
+                        >
+                          Apply Draft to Ballot
+                        </Button>
+                      )}
+                    </div>
+                    {draftError && (
+                      <p className="text-sm text-destructive">{draftError}</p>
+                    )}
+                    {draftSummary && draftPreview && (
+                      <div className="rounded-lg border border-black/5 bg-background/70 p-4 text-sm dark:border-white/10">
+                        <p className="font-medium">
+                          Draft preview • {draftSummary.confidence}/100 confidence
+                        </p>
+                        <p className="mt-1 text-muted-foreground">
+                          Parsed {draftPreview.races.length} race
+                          {draftPreview.races.length === 1 ? "" : "s"} and{" "}
+                          {draftPreview.measures.length} measure
+                          {draftPreview.measures.length === 1 ? "" : "s"}.
+                        </p>
+                        {draftSummary.notes.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                            {draftSummary.notes.map((note) => (
+                              <li key={note}>• {note}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Results / Error */}
         {hasSearched && !isLoading && (
           <div className="mt-6">
@@ -344,25 +526,52 @@ export default function BallotPage() {
               </p>
             )}
 
-            {(state || lookupError || races.length > 0 || measures.length > 0) && (
+            {importMeta && (
               <div className="mb-4 rounded-lg border border-black/5 bg-background/70 p-4 text-sm dark:border-white/10">
-                <p className="font-medium">Verify this ballot against an official sample ballot</p>
-                <p className="mt-1 text-muted-foreground">
-                  {getBallotSourceNotice(races.length, measures.length, election)}
+                <p className="font-medium">
+                  {importMeta.status === "complete"
+                    ? "Imported ballot"
+                    : importMeta.status === "partial"
+                      ? "Partial ballot import"
+                      : "Ballot import unavailable"}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {ballotFallbackLinks.map((link) => (
-                    <a
-                      key={link.label}
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center rounded-full border border-black/10 px-3 py-1.5 text-xs font-medium text-foreground/80 transition hover:bg-muted dark:border-white/10"
-                    >
-                      {link.label}
-                    </a>
-                  ))}
+                <p className="mt-1 text-muted-foreground">
+                  {importMeta.message}
+                </p>
+                {importMeta.fallbackLinks.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {importMeta.fallbackLinks.map((link) => (
+                      <a
+                        key={`${link.kind}-${link.url}`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center rounded-full border border-black/10 px-3 py-1.5 text-xs font-medium text-foreground/80 transition hover:bg-muted dark:border-white/10"
+                      >
+                        {link.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                    Source: {importMeta.source.replace("_", " ")}
+                  </span>
+                  <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                    Confidence: {importMeta.confidence}/100
+                  </span>
+                  {importMeta.importId && (
+                    <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                      Import ID: {importMeta.importId.slice(0, 8)}
+                    </span>
+                  )}
                 </div>
+                {importMeta.status !== "complete" && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Use the official source above to verify missing races or
+                    measures, then finish editing below.
+                  </p>
+                )}
               </div>
             )}
 

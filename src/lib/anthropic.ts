@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type {
+  BallotReviewDraft,
   ValuesProfile,
   Race,
   Candidate,
@@ -214,6 +215,62 @@ export interface MeasureResearchRequest {
   profile: ValuesProfile;
 }
 
+function buildBallotTextParsePrompt(input: {
+  ballotText: string;
+  state: string | null;
+}): string {
+  return `Parse the pasted ballot text below into a clean ballot draft.
+
+## Context
+- State: ${input.state ?? "Unknown"}
+
+## Instructions
+Use only the pasted text. Do not do web research. Extract the likely election info, candidate races, and ballot measures. Return ONLY valid JSON with this exact structure:
+
+{
+  "election": {
+    "name": "<string or null>",
+    "electionDay": "<YYYY-MM-DD string or null>",
+    "kind": "<primary|general|special|other|null>",
+    "selectedParty": "<string or null>"
+  },
+  "races": [
+    {
+      "name": "<race title>",
+      "level": "<federal|state|local>",
+      "contestType": "<string or null>",
+      "candidates": [
+        {
+          "name": "<candidate name>",
+          "party": "<string or null>"
+        }
+      ]
+    }
+  ],
+  "measures": [
+    {
+      "title": "<measure title>",
+      "description": "<plain-language description from the pasted text>",
+      "type": "<referendum|initiative|amendment|other>"
+    }
+  ],
+  "confidence": <integer 0-100>,
+  "notes": [
+    "<short note about ambiguities, OCR issues, or anything the user should verify>"
+  ]
+}
+
+Rules:
+- Prefer omission over guessing.
+- If party is not clearly stated, use null.
+- If the election date is unclear, use null.
+- Keep notes short and concrete.
+- Keep measure descriptions concise.
+
+## Pasted Ballot Text
+${input.ballotText}`;
+}
+
 function buildCandidateDossierPrompt(
   candidate: Candidate,
   race: Race,
@@ -403,5 +460,17 @@ export function personalizeMeasureDossier(
     maxTokens: 2200,
     prompt: buildMeasurePrompt(req.measure, req.state, req.profile, dossier),
     parseError: "Could not parse personalized measure research",
+  });
+}
+
+export function parseBallotReviewDraft(input: {
+  ballotText: string;
+  state: string | null;
+}): Promise<BallotReviewDraft> {
+  return runJsonCompletion<BallotReviewDraft>({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 1800,
+    prompt: buildBallotTextParsePrompt(input),
+    parseError: "Could not parse ballot review draft",
   });
 }

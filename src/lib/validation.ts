@@ -4,6 +4,9 @@ import {
   POLICY_SIGNAL_CHOICES,
   POLITICAL_IDENTITIES,
   type BallotInput,
+  type BallotReviewDraft,
+  type BallotFallbackLink,
+  type BallotImportMeta,
   type BallotMeasure,
   type Candidate,
   type CandidateDossier,
@@ -153,6 +156,114 @@ function isBallotMeasure(value: unknown): value is BallotMeasure {
   );
 }
 
+function isBallotFallbackLink(value: unknown): value is BallotFallbackLink {
+  if (!isRecord(value)) return false;
+  return (
+    isString(value.label) &&
+    value.label.trim().length > 0 &&
+    isString(value.url) &&
+    value.url.trim().length > 0 &&
+    (value.kind === "official_search" ||
+      value.kind === "reference" ||
+      value.kind === "news" ||
+      value.kind === "official")
+  );
+}
+
+function isBallotImportMeta(value: unknown): value is BallotImportMeta {
+  if (value === null || value === undefined) return true;
+  if (!isRecord(value) || !Array.isArray(value.fallbackLinks)) return false;
+
+  const locality = value.locality;
+  const localityValid =
+    locality === null ||
+    locality === undefined ||
+    (isRecord(locality) &&
+      isNullableString(locality.city) &&
+      isNullableString(locality.county) &&
+      isNullableString(locality.state) &&
+      isNullableString(locality.zip));
+
+  return (
+    (value.importId === null || isString(value.importId)) &&
+    (value.source === "google_civic" ||
+      value.source === "official_upload" ||
+      value.source === "manual" ||
+      value.source === "licensed_provider") &&
+    (value.status === "complete" ||
+      value.status === "partial" ||
+      value.status === "unavailable") &&
+    typeof value.confidence === "number" &&
+    value.confidence >= 0 &&
+    value.confidence <= 100 &&
+    isNullableString(value.message) &&
+    value.fallbackLinks.every(isBallotFallbackLink) &&
+    localityValid
+  );
+}
+
+export function isValidBallotReviewDraft(
+  value: unknown
+): value is BallotReviewDraft {
+  if (!isRecord(value) || !Array.isArray(value.races) || !Array.isArray(value.measures) || !Array.isArray(value.notes)) {
+    return false;
+  }
+
+  const election =
+    value.election === null ||
+    value.election === undefined ||
+    (isRecord(value.election) &&
+      (value.election.name === null || isString(value.election.name)) &&
+      (value.election.electionDay === null || isString(value.election.electionDay)) &&
+      (value.election.kind === null ||
+        value.election.kind === "primary" ||
+        value.election.kind === "general" ||
+        value.election.kind === "special" ||
+        value.election.kind === "other") &&
+      isNullableString(value.election.selectedParty));
+
+  const races = value.races.every(
+    (race) =>
+      isRecord(race) &&
+      isString(race.name) &&
+      (race.level === "federal" ||
+        race.level === "state" ||
+        race.level === "local") &&
+      (race.contestType === null ||
+        race.contestType === undefined ||
+        isString(race.contestType)) &&
+      Array.isArray(race.candidates) &&
+      race.candidates.every(
+        (candidate) =>
+          isRecord(candidate) &&
+          isString(candidate.name) &&
+          candidate.name.trim().length > 0 &&
+          isNullableString(candidate.party)
+      )
+  );
+
+  const measures = value.measures.every(
+    (measure) =>
+      isRecord(measure) &&
+      isString(measure.title) &&
+      isString(measure.description) &&
+      (measure.type === "referendum" ||
+        measure.type === "initiative" ||
+        measure.type === "amendment" ||
+        measure.type === "other")
+  );
+
+  return (
+    election &&
+    races &&
+    measures &&
+    typeof value.confidence === "number" &&
+    value.confidence >= 0 &&
+    value.confidence <= 100 &&
+    value.notes.every((note) => isString(note))
+  );
+}
+
 export function isValidValuesProfile(value: unknown): value is ValuesProfile {
   if (!isRecord(value) || !isRecord(value.issueRatings)) return false;
 
@@ -187,6 +298,7 @@ export function isValidBallotInput(value: unknown): value is BallotInput {
     isString(value.address) &&
     isString(value.state) &&
     isValidElectionContext(value.election ?? null) &&
+    isBallotImportMeta(value.importMeta ?? null) &&
     value.races.every(isValidRace) &&
     value.measures.every(isBallotMeasure)
   );
