@@ -681,6 +681,20 @@ export default function BallotPage() {
               </div>
             )}
 
+            {races.length === 0 &&
+              measures.length === 0 &&
+              !lookupError &&
+              availableElections.length <= 1 && (
+                <div className="mb-4 rounded-lg border border-muted bg-muted/40 p-4 text-sm">
+                  <p className="font-medium">No ballot data found for this address yet</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Check back later for your ballot — election data typically
+                    becomes available closer to election day. You can also add
+                    races and candidates manually below.
+                  </p>
+                </div>
+              )}
+
             <RaceEditor
               races={races}
               onRacesChange={setRaces}
