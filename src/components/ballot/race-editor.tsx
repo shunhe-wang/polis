@@ -13,6 +13,7 @@ interface RaceEditorProps {
   races: Race[];
   onRacesChange: (races: Race[]) => void;
   state?: string | null;
+  locality?: string | null;
   userTier: UserTier;
   canLookupCandidates: boolean;
 }
@@ -89,7 +90,8 @@ const RACE_TEMPLATES: RaceTemplate[] = [
 
 function getRaceLookupRequirement(
   raceName: string,
-  state: string | null | undefined
+  state: string | null | undefined,
+  locality: string | null | undefined
 ): string | null {
   if (!state) {
     return "Add your address first so Polis knows which state and ballot context to search.";
@@ -115,6 +117,10 @@ function getRaceLookupRequirement(
       : "Add the district, city, or locality before looking up candidates for this race.";
   }
 
+  if (lower.includes("mayor") && !hasQualifier && !locality) {
+    return "Add the city or locality before looking up candidates for this race.";
+  }
+
   return null;
 }
 
@@ -122,6 +128,7 @@ export function RaceEditor({
   races,
   onRacesChange,
   state,
+  locality,
   userTier,
   canLookupCandidates,
 }: RaceEditorProps) {
@@ -139,7 +146,7 @@ export function RaceEditor({
   racesRef.current = races;
 
   const lookUpCandidates = async (raceId: string, raceName: string) => {
-    const requirement = getRaceLookupRequirement(raceName, state);
+    const requirement = getRaceLookupRequirement(raceName, state, locality);
     if (requirement) {
       setLookupMessage(requirement);
       return;
@@ -160,7 +167,11 @@ export function RaceEditor({
       const res = await fetch("/api/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raceName, state: state ?? "" }),
+        body: JSON.stringify({
+          raceName,
+          state: state ?? "",
+          locality: locality ?? "",
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -382,7 +393,7 @@ export function RaceEditor({
             lookUpCandidates(race.id, race.name)
           }
           canLookUpCandidates={canLookupCandidates}
-          lookupRequirement={getRaceLookupRequirement(race.name, state)}
+          lookupRequirement={getRaceLookupRequirement(race.name, state, locality)}
           userTier={userTier}
         />
       ))}

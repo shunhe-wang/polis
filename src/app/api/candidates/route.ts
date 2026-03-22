@@ -79,9 +79,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const raceName: string = body.raceName.trim();
   const state =
-    typeof body.state === "string" && body.state.trim().length <= 100
-      ? body.state.trim()
+    typeof body.state === "string" && /^[A-Za-z]{2}$/.test(body.state.trim())
+      ? body.state.trim().toUpperCase()
       : "";
+  const locality =
+    typeof body.locality === "string" && body.locality.trim().length <= 120
+      ? body.locality.trim()
+      : "";
+
+  if (!state) {
+    return NextResponse.json(
+      {
+        error:
+          "Candidate lookup needs a valid 2-letter state code so Polis can search the correct race.",
+        candidates: [],
+      },
+      { status: 400 }
+    );
+  }
 
   try {
     const quotaRules = getCandidateLookupQuotaRules();
@@ -138,7 +153,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           messages: [
             {
               role: "user",
-              content: `List candidates for "${raceName}"${state ? ` in ${state}` : ""}. Search the web, then reply with ONLY a JSON array: [{"name":"...","party":"..."}]. Empty array if unknown.`,
+              content: `List candidates for "${raceName}" in ${state}${locality ? `, ${locality}` : ""}. Restrict the search to the relevant election for that jurisdiction only. Search the web, then reply with ONLY a JSON array: [{"name":"...","party":"..."}]. Empty array if unknown.`,
             },
           ],
         },

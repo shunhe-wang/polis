@@ -5,8 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+interface AddressLookupValue {
+  streetAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
 interface AddressLookupProps {
-  onLookup: (address: string) => void;
+  value: AddressLookupValue;
+  onChange: (value: AddressLookupValue) => void;
+  onLookup: (address: string, stateHint?: string) => void;
   isLoading: boolean;
 }
 
@@ -18,44 +27,93 @@ interface AddressSuggestion {
   zipCode: string;
 }
 
-export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
+function normalizeStateInput(value: string): string {
+  return value.replace(/[^a-z]/gi, "").toUpperCase().slice(0, 2);
+}
+
+function normalizeZipCode(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 5);
+}
+
+export function AddressLookup({
+  value,
+  onChange,
+  onLookup,
+  isLoading,
+}: AddressLookupProps) {
   const suppressNextLookupRef = useRef(false);
   const blurTimeoutRef = useRef<number | null>(null);
+  const [autocompleteEnabled, setAutocompleteEnabled] = useState(false);
+  const [autocompleteReady, setAutocompleteReady] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const [streetAddress, setStreetAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [zipCode, setZipCode] = useState("");
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [autocompleteEnabled, setAutocompleteEnabled] = useState(true);
 
+  const normalizedState = normalizeStateInput(value.state);
+  const normalizedZipCode = normalizeZipCode(value.zipCode);
+  const hasValidState = normalizedState.length === 2;
+  const hasValidZipCode = normalizedZipCode.length === 5;
   const hasFullAddress =
-    streetAddress.trim().length > 0 &&
-    city.trim().length > 0 &&
-    state.trim().length > 0;
+    value.streetAddress.trim().length > 0 &&
+    value.city.trim().length > 0 &&
+    hasValidState;
   const canSubmit =
     hasFullAddress ||
-    zipCode.trim().length > 0 ||
-    searchText.trim().length > 0;
+    hasValidZipCode ||
+    (autocompleteEnabled && searchText.trim().length > 0);
 
   const buildLookupAddress = () => {
     if (!hasFullAddress) {
-      return searchText.trim() || zipCode.trim();
+      return autocompleteEnabled ? searchText.trim() || normalizedZipCode : normalizedZipCode;
     }
 
     return [
-      streetAddress.trim(),
-      city.trim(),
-      state.trim().toUpperCase(),
-      zipCode.trim(),
+      value.streetAddress.trim(),
+      value.city.trim(),
+      normalizedState,
+      normalizedZipCode,
     ]
       .filter(Boolean)
       .join(", ");
   };
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function checkAutocomplete() {
+      try {
+        const response = await fetch("/api/address/autocomplete", {
+          cache: "no-store",
+        });
+        const data = (await response.json()) as { enabled?: boolean };
+        if (!cancelled) {
+          setAutocompleteEnabled(data.enabled === true);
+          setAutocompleteReady(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setAutocompleteEnabled(false);
+          setAutocompleteReady(true);
+        }
+      }
+    }
+
+    void checkAutocomplete();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!autocompleteEnabled) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setIsSuggesting(false);
+      return;
+    }
+
     if (suppressNextLookupRef.current) {
       suppressNextLookupRef.current = false;
       return;
@@ -74,10 +132,13 @@ export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
       setIsSuggesting(true);
       try {
         const params = new URLSearchParams({ q: query });
-        const response = await fetch(`/api/address/autocomplete?${params.toString()}`, {
-          signal: controller.signal,
-          cache: "no-store",
-        });
+        const response = await fetch(
+          `/api/address/autocomplete?${params.toString()}`,
+          {
+            signal: controller.signal,
+            cache: "no-store",
+          }
+        );
         const data = (await response.json()) as {
           enabled?: boolean;
           suggestions?: AddressSuggestion[];
@@ -104,7 +165,7 @@ export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [searchText]);
+  }, [autocompleteEnabled, searchText]);
 
   useEffect(() => {
     return () => {
@@ -117,19 +178,21 @@ export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
   const applySuggestion = (suggestion: AddressSuggestion) => {
     suppressNextLookupRef.current = true;
     setSearchText(suggestion.label);
-    setStreetAddress(suggestion.streetAddress);
-    setCity(suggestion.city);
-    setState(suggestion.state);
-    setZipCode(suggestion.zipCode);
+    onChange({
+      streetAddress: suggestion.streetAddress,
+      city: suggestion.city,
+      state: normalizeStateInput(suggestion.state),
+      zipCode: normalizeZipCode(suggestion.zipCode),
+    });
     setSuggestions([]);
     setShowSuggestions(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     const address = buildLookupAddress();
     if (address) {
-      onLookup(address);
+      onLookup(address, hasValidState ? normalizedState : undefined);
     }
   };
 
@@ -138,72 +201,81 @@ export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
       <div className="space-y-2">
         <p className="text-sm font-medium">Your Address</p>
         <p className="text-xs text-muted-foreground">
-          Start with the autocomplete field for live suggestions, or fill the
-          structured fields manually. Browser autofill still works too, and you
-          can use only a ZIP code when you want a quick lookup.
+          Fill in your address below. Browser autofill works here, and if live
+          suggestions are configured they will appear above the form.
         </p>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="address-search">Search Address</Label>
-        <div className="relative">
-          <Input
-            id="address-search"
-            type="text"
-            placeholder="Start typing your address"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            onFocus={() => setShowSuggestions(suggestions.length > 0)}
-            onBlur={() => {
-              blurTimeoutRef.current = window.setTimeout(() => {
-                setShowSuggestions(false);
-              }, 120);
-            }}
-            autoComplete="street-address"
-            disabled={isLoading}
-          />
-          {showSuggestions && suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 rounded-xl border border-black/10 bg-background p-1 shadow-xl dark:border-white/10">
-              {suggestions.map((suggestion) => (
-                <button
-                  key={suggestion.label}
-                  type="button"
-                  className="flex w-full flex-col rounded-lg px-3 py-2 text-left transition hover:bg-muted"
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    applySuggestion(suggestion);
-                  }}
-                >
-                  <span className="text-sm font-medium">{suggestion.streetAddress || suggestion.label}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {[suggestion.city, suggestion.state, suggestion.zipCode]
-                      .filter(Boolean)
-                      .join(", ") || suggestion.label}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {autocompleteEnabled
-            ? isSuggesting
+
+      {autocompleteReady && autocompleteEnabled && (
+        <div className="space-y-2">
+          <Label htmlFor="address-search">Address Suggestions</Label>
+          <div className="relative">
+            <Input
+              id="address-search"
+              type="text"
+              placeholder="Start typing your address"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              onFocus={() => setShowSuggestions(suggestions.length > 0)}
+              onBlur={() => {
+                blurTimeoutRef.current = window.setTimeout(() => {
+                  setShowSuggestions(false);
+                }, 120);
+              }}
+              autoComplete="street-address"
+              disabled={isLoading}
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 rounded-xl border border-black/10 bg-background p-1 shadow-xl dark:border-white/10">
+                {suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.label}
+                    type="button"
+                    className="flex w-full flex-col rounded-lg px-3 py-2 text-left transition hover:bg-muted"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      applySuggestion(suggestion);
+                    }}
+                  >
+                    <span className="text-sm font-medium">
+                      {suggestion.streetAddress || suggestion.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {[suggestion.city, suggestion.state, suggestion.zipCode]
+                        .filter(Boolean)
+                        .join(", ") || suggestion.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isSuggesting
               ? "Looking up address suggestions..."
-              : "Pick a suggestion to fill the fields below automatically."
-            : "Address suggestions are not configured yet, so you can keep filling the form manually."}
-        </p>
-      </div>
+              : "Pick a suggestion to fill the fields below automatically."}
+          </p>
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label htmlFor="street-address">Street Address</Label>
         <Input
           id="street-address"
           type="text"
           placeholder="1600 Pennsylvania Ave NW"
-          value={streetAddress}
-          onChange={(e) => setStreetAddress(e.target.value)}
+          value={value.streetAddress}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              streetAddress: event.target.value,
+            })
+          }
           autoComplete="street-address"
           disabled={isLoading}
         />
       </div>
+
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_92px_120px]">
         <div className="space-y-2">
           <Label htmlFor="city">City</Label>
@@ -211,25 +283,37 @@ export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
             id="city"
             type="text"
             placeholder="Washington"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
+            value={value.city}
+            onChange={(event) =>
+              onChange({
+                ...value,
+                city: event.target.value,
+              })
+            }
             autoComplete="address-level2"
             disabled={isLoading}
           />
         </div>
+
         <div className="space-y-2">
           <Label htmlFor="state">State</Label>
           <Input
             id="state"
             type="text"
             placeholder="DC"
-            value={state}
-            onChange={(e) => setState(e.target.value)}
+            value={normalizedState}
+            onChange={(event) =>
+              onChange({
+                ...value,
+                state: normalizeStateInput(event.target.value),
+              })
+            }
             autoComplete="address-level1"
             maxLength={2}
             disabled={isLoading}
           />
         </div>
+
         <div className="space-y-2">
           <Label htmlFor="zip-code">ZIP Code</Label>
           <Input
@@ -237,17 +321,35 @@ export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
             type="text"
             inputMode="numeric"
             placeholder="20500"
-            value={zipCode}
-            onChange={(e) => setZipCode(e.target.value)}
+            value={normalizedZipCode}
+            onChange={(event) =>
+              onChange({
+                ...value,
+                zipCode: normalizeZipCode(event.target.value),
+              })
+            }
             autoComplete="postal-code"
+            pattern="[0-9]{5}"
+            maxLength={5}
             disabled={isLoading}
           />
         </div>
       </div>
+
+      {(value.zipCode.length > 0 && !hasValidZipCode) ||
+      (value.state.length > 0 && !hasValidState) ? (
+        <p className="text-xs text-destructive">
+          {!hasValidState && value.state.length > 0
+            ? "State must be a 2-letter code."
+            : "ZIP code must be exactly 5 digits."}
+        </p>
+      ) : null}
+
       <p className="text-xs text-muted-foreground">
         If public election data is incomplete, Polis will show official
         fallback links and let you finish the ballot manually.
       </p>
+
       <Button type="submit" disabled={!canSubmit || isLoading}>
         {isLoading ? "Looking up your ballot..." : "Find My Ballot"}
       </Button>

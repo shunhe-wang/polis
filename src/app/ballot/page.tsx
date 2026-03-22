@@ -68,18 +68,18 @@ function saveBrowserBallot(key: string, value: string): boolean {
   return savedInSession || savedInLocal;
 }
 
-function getImportConfidenceLabel(confidence: number): string {
-  if (confidence >= 80) return "High";
-  if (confidence >= 50) return "Medium";
-  return "Low";
-}
-
 export default function BallotPage() {
   const router = useRouter();
   const [valuesProfile, setValuesProfile] = useState<ValuesProfile | null>(
     null
   );
   const [address, setAddress] = useState("");
+  const [addressDraft, setAddressDraft] = useState({
+    streetAddress: "",
+    city: "",
+    state: "",
+    zipCode: "",
+  });
   const [state, setState] = useState<string | null>(null);
   const [election, setElection] = useState<BallotElectionContext | null>(null);
   const [availableElections, setAvailableElections] = useState<
@@ -134,6 +134,16 @@ export default function BallotPage() {
         const ballot = JSON.parse(ballotStr) as BallotInput;
         setAddress(ballot.address);
         setState(ballot.state || null);
+        const parts = ballot.address
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean);
+        setAddressDraft({
+          streetAddress: parts[0] ?? "",
+          city: parts[1] ?? "",
+          state: ballot.state || "",
+          zipCode: parts.at(-1)?.match(/^\d{5}$/)?.[0] ?? "",
+        });
         setElection(ballot.election ?? null);
         setImportMeta(ballot.importMeta ?? null);
         setRaces(ballot.races ?? []);
@@ -194,8 +204,15 @@ export default function BallotPage() {
     return () => window.clearTimeout(timeout);
   }, [address, state, election, importMeta, races, measures, hasHydrated]);
 
-  const handleLookup = async (addr: string, selectedElectionId?: string) => {
+  const handleLookup = async (
+    addr: string,
+    selectedElectionId?: string,
+    stateHint?: string
+  ) => {
     setAddress(addr);
+    if (stateHint) {
+      setState(stateHint);
+    }
     setIsLoading(true);
     setLookupError(null);
     setHasSearched(true);
@@ -214,7 +231,10 @@ export default function BallotPage() {
         setLookupError(
           data.error || "Ballot lookup is temporarily unavailable."
         );
-        setState(null);
+        setState(
+          (currentState) =>
+            currentState ?? stateHint ?? (addressDraft.state || null)
+        );
         setElection(null);
         setAvailableElections([]);
         setImportMeta(data.importMeta ?? null);
@@ -229,7 +249,7 @@ export default function BallotPage() {
         setLookupError(data.error);
       }
 
-      setState(data.state);
+      setState(data.state ?? stateHint ?? (addressDraft.state || null));
       setAvailableElections(data.availableElections ?? []);
       setImportMeta(data.importMeta ?? null);
       if (data.requiresElectionSelection) {
@@ -249,6 +269,10 @@ export default function BallotPage() {
     } catch {
       setLookupError(
         "Could not connect to the ballot lookup service. You can add races manually below."
+      );
+      setState(
+        (currentState) =>
+          currentState ?? stateHint ?? (addressDraft.state || null)
       );
       setImportMeta(null);
     } finally {
@@ -440,7 +464,12 @@ export default function BallotPage() {
         {/* Address Lookup */}
         <Card>
           <CardContent className="pt-6">
-            <AddressLookup onLookup={handleLookup} isLoading={isLoading} />
+            <AddressLookup
+              value={addressDraft}
+              onChange={setAddressDraft}
+              onLookup={handleLookup}
+              isLoading={isLoading}
+            />
           </CardContent>
         </Card>
 
@@ -572,9 +601,6 @@ export default function BallotPage() {
                   <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
                     Source: {importMeta.source.replace("_", " ")}
                   </span>
-                  <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
-                    Import confidence: {getImportConfidenceLabel(importMeta.confidence)} ({importMeta.confidence}/100)
-                  </span>
                   {importMeta.importId && (
                     <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
                       Import ID: {importMeta.importId.slice(0, 8)}
@@ -585,11 +611,6 @@ export default function BallotPage() {
                   <p className="mt-3 text-xs text-muted-foreground">
                     Use the official source above to verify missing races or
                     measures, then finish editing below.
-                  </p>
-                )}
-                {importMeta.status === "unavailable" && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    This score describes how complete the imported ballot looks, not how confident Polis is about any recommendation.
                   </p>
                 )}
               </div>
@@ -663,7 +684,8 @@ export default function BallotPage() {
             <RaceEditor
               races={races}
               onRacesChange={setRaces}
-              state={state}
+              state={state ?? (addressDraft.state || null)}
+              locality={addressDraft.city || null}
               userTier={account.tier}
               canLookupCandidates={account.tier === "pro" && account.trustedAccount}
             />
