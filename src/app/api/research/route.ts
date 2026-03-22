@@ -62,6 +62,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { recordAppEvent } from "@/lib/observability";
 import { getAccountTrustStatus } from "@/lib/account-trust";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
+import { getSameOriginError } from "@/lib/csrf";
 
 interface ResearchRequestBody {
   valuesProfile: ValuesProfile;
@@ -184,6 +185,14 @@ async function getMeasureDossier(
 //   { "type": "done" }
 
 export async function POST(request: NextRequest) {
+  const csrfError = getSameOriginError(request);
+  if (csrfError) {
+    return new Response(
+      JSON.stringify({ error: csrfError }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   const supabase = await createClient();
   if (!supabase) {
     return new Response(

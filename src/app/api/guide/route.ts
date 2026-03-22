@@ -18,6 +18,7 @@ import {
   sanitizeRaceRecommendation,
 } from "@/lib/research-text";
 import { buildBallotHash } from "@/lib/research-cache";
+import { getSameOriginError } from "@/lib/csrf";
 
 interface SaveGuideBody {
   valuesProfile: ValuesProfile;
@@ -44,6 +45,14 @@ function isValidSaveGuideBody(body: unknown): body is SaveGuideBody {
 }
 
 export async function POST(request: NextRequest) {
+  const csrfError = getSameOriginError(request);
+  if (csrfError) {
+    return NextResponse.json(
+      { error: csrfError },
+      { status: 403 }
+    );
+  }
+
   const supabase = await createClient();
   if (!supabase) {
     return NextResponse.json(

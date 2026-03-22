@@ -14,6 +14,7 @@ import {
   classifyDeterministicStatewideRace,
   findDeterministicStatewideCandidates,
 } from "@/lib/deterministic-candidate-lookup";
+import { getSameOriginError } from "@/lib/csrf";
 
 const anthropic = new Anthropic();
 
@@ -23,6 +24,14 @@ interface CandidateLookupResult {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const csrfError = getSameOriginError(request);
+  if (csrfError) {
+    return NextResponse.json(
+      { error: csrfError, candidates: [] },
+      { status: 403 }
+    );
+  }
+
   const supabase = await createClient();
   if (!supabase) {
     return NextResponse.json(

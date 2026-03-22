@@ -12,6 +12,7 @@ import {
 } from "@/lib/anthropic";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import { isValidBallotReviewDraft } from "@/lib/validation";
+import { getSameOriginError } from "@/lib/csrf";
 import type {
   BallotInput,
   BallotImportMeta,
@@ -125,6 +126,14 @@ function withIds(draft: BallotReviewDraft, state: string | null): BallotInput {
 }
 
 export async function POST(request: NextRequest) {
+  const csrfError = getSameOriginError(request);
+  if (csrfError) {
+    return NextResponse.json(
+      { error: csrfError },
+      { status: 403 }
+    );
+  }
+
   const supabase = await createClient();
   if (!supabase) {
     return NextResponse.json(

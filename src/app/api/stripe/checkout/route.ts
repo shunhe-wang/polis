@@ -3,8 +3,17 @@ import { createClient } from "@/lib/supabase/server";
 import { getProductConfig, getProductPriceId } from "@/lib/billing";
 import { getStripeClient } from "@/lib/stripe";
 import { getAccountTrustStatus } from "@/lib/account-trust";
+import { getSameOriginError } from "@/lib/csrf";
 
 export async function POST(request: NextRequest) {
+  const csrfError = getSameOriginError(request);
+  if (csrfError) {
+    return NextResponse.json(
+      { error: csrfError },
+      { status: 403 }
+    );
+  }
+
   const supabase = await createClient();
   const stripe = getStripeClient();
 

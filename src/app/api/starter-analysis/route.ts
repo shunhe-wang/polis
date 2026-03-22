@@ -29,6 +29,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { recordAppEvent } from "@/lib/observability";
 import { getAccountTrustStatus } from "@/lib/account-trust";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
+import { getSameOriginError } from "@/lib/csrf";
 import {
   isValidCandidate,
   isValidCandidateDossier,
@@ -74,6 +75,14 @@ function isValidStarterAnalysisBody(
 }
 
 export async function POST(request: NextRequest) {
+  const csrfError = getSameOriginError(request);
+  if (csrfError) {
+    return NextResponse.json(
+      { error: csrfError },
+      { status: 403 }
+    );
+  }
+
   const supabase = await createClient();
   if (!supabase) {
     return NextResponse.json(

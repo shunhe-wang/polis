@@ -373,6 +373,9 @@ test("pro users see full-ballot guide results", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Save & Share Guide" })).toBeVisible();
   await expect(page.getByText("Amendment 1")).toBeVisible();
   await expect(page.getByRole("button", { name: "Collapse" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Take to Polls" }).click();
+  await expect(page.getByRole("heading", { name: "Your Quick Ballot" })).toBeVisible();
+  await expect(page.getByText("Recommended pick")).toBeVisible();
 });
 
 test("pricing page shows checkout return state", async ({ page }) => {

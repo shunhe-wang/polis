@@ -24,6 +24,7 @@ import {
   isValidMeasureDossier,
 } from "@/lib/validation";
 import { createEmptyValuesProfile } from "@/lib/types";
+import { getSameOriginError } from "@/lib/csrf";
 
 interface PrefetchBody {
   ballotInput: BallotInput;
@@ -65,6 +66,14 @@ function getPrefetchMeasureLimit(tier: "free" | "pro"): number {
 }
 
 export async function POST(request: NextRequest) {
+  const csrfError = getSameOriginError(request);
+  if (csrfError) {
+    return NextResponse.json(
+      { error: csrfError },
+      { status: 403 }
+    );
+  }
+
   const supabase = await createClient();
   const admin = createAdminClient();
 

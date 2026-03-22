@@ -9,6 +9,7 @@ import { recordAppEvent } from "@/lib/observability";
 import type { BallotInput } from "@/lib/types";
 import { isValidBallotInput } from "@/lib/validation";
 import { getAccountTrustStatus } from "@/lib/account-trust";
+import { getSameOriginError } from "@/lib/csrf";
 
 interface GuideAccessBody {
   ballotInput: BallotInput;
@@ -27,6 +28,14 @@ function isValidGuideAccessBody(body: unknown): body is GuideAccessBody {
 }
 
 export async function POST(request: NextRequest) {
+  const csrfError = getSameOriginError(request);
+  if (csrfError) {
+    return NextResponse.json(
+      { error: csrfError },
+      { status: 403 }
+    );
+  }
+
   const supabase = await createClient();
   if (!supabase) {
     return NextResponse.json(

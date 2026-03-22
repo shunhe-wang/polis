@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AddressLookup } from "@/components/ballot/address-lookup";
 import { RaceEditor } from "@/components/ballot/race-editor";
@@ -26,6 +27,16 @@ import {
   safeSessionStorageSet,
 } from "@/lib/browser-storage";
 import { saveBallotInput, syncFromSupabase } from "@/lib/persistence";
+import {
+  removeDraftCandidate,
+  removeDraftMeasure,
+  removeDraftRace,
+  updateDraftCandidateName,
+  updateDraftCandidateParty,
+  updateDraftMeasureDescription,
+  updateDraftMeasureTitle,
+  updateDraftRaceName,
+} from "@/lib/draft-ballot-review";
 
 interface CivicApiResponse {
   state: string | null;
@@ -611,23 +622,204 @@ export default function BallotPage() {
                       <p className="text-sm text-destructive">{draftError}</p>
                     )}
                     {draftSummary && draftPreview && (
-                      <div className="rounded-lg border border-black/5 bg-background/70 p-4 text-sm dark:border-white/10">
-                        <p className="font-medium">
-                          Draft preview • {draftSummary.confidence}/100 confidence
-                        </p>
-                        <p className="mt-1 text-muted-foreground">
-                          Parsed {draftPreview.races.length} race
-                          {draftPreview.races.length === 1 ? "" : "s"} and{" "}
-                          {draftPreview.measures.length} measure
-                          {draftPreview.measures.length === 1 ? "" : "s"}.
-                        </p>
+                      <div className="space-y-4 rounded-lg border border-black/5 bg-background/70 p-4 text-sm dark:border-white/10">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">Review parsed draft</p>
+                            <p className="mt-1 text-muted-foreground">
+                              Fix anything wrong before applying this draft to
+                              your ballot. Parsed {draftPreview.races.length} race
+                              {draftPreview.races.length === 1 ? "" : "s"} and{" "}
+                              {draftPreview.measures.length} measure
+                              {draftPreview.measures.length === 1 ? "" : "s"}.
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setDraftPreview(null);
+                              setDraftSummary(null);
+                              setDraftText("");
+                              setDraftFile(null);
+                            }}
+                          >
+                            Discard Draft
+                          </Button>
+                        </div>
                         {draftSummary.notes.length > 0 && (
-                          <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                          <ul className="space-y-1 text-xs text-muted-foreground">
                             {draftSummary.notes.map((note) => (
                               <li key={note}>• {note}</li>
                             ))}
                           </ul>
                         )}
+                        <div className="space-y-4">
+                          {draftPreview.races.map((race) => (
+                            <div
+                              key={race.id}
+                              className="space-y-3 rounded-lg border border-black/5 bg-background/80 p-3 dark:border-white/10"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 space-y-2">
+                                  <label className="text-xs font-medium text-muted-foreground">
+                                    Race name
+                                  </label>
+                                  <Input
+                                    value={race.name}
+                                    onChange={(event) =>
+                                      setDraftPreview((current) =>
+                                        current
+                                          ? updateDraftRaceName(
+                                              current,
+                                              race.id,
+                                              event.target.value
+                                            )
+                                          : current
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setDraftPreview((current) =>
+                                      current
+                                        ? removeDraftRace(current, race.id)
+                                        : current
+                                    )
+                                  }
+                                >
+                                  Remove Race
+                                </Button>
+                              </div>
+                              <div className="space-y-2">
+                                {race.candidates.map((candidate) => (
+                                  <div
+                                    key={candidate.id}
+                                    className="grid gap-2 rounded-md border border-black/5 p-3 dark:border-white/10 sm:grid-cols-[minmax(0,1fr)_120px_auto]"
+                                  >
+                                    <Input
+                                      value={candidate.name}
+                                      onChange={(event) =>
+                                        setDraftPreview((current) =>
+                                          current
+                                            ? updateDraftCandidateName(
+                                                current,
+                                                race.id,
+                                                candidate.id,
+                                                event.target.value
+                                              )
+                                            : current
+                                        )
+                                      }
+                                      placeholder="Candidate name"
+                                    />
+                                    <Input
+                                      value={candidate.party ?? ""}
+                                      onChange={(event) =>
+                                        setDraftPreview((current) =>
+                                          current
+                                            ? updateDraftCandidateParty(
+                                                current,
+                                                race.id,
+                                                candidate.id,
+                                                event.target.value
+                                              )
+                                            : current
+                                        )
+                                      }
+                                      placeholder="Party"
+                                    />
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        setDraftPreview((current) =>
+                                          current
+                                            ? removeDraftCandidate(
+                                                current,
+                                                race.id,
+                                                candidate.id
+                                              )
+                                            : current
+                                        )
+                                      }
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {draftPreview.measures.map((measure) => (
+                            <div
+                              key={measure.id}
+                              className="space-y-3 rounded-lg border border-black/5 bg-background/80 p-3 dark:border-white/10"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 space-y-2">
+                                  <label className="text-xs font-medium text-muted-foreground">
+                                    Measure title
+                                  </label>
+                                  <Input
+                                    value={measure.title}
+                                    onChange={(event) =>
+                                      setDraftPreview((current) =>
+                                        current
+                                          ? updateDraftMeasureTitle(
+                                              current,
+                                              measure.id,
+                                              event.target.value
+                                            )
+                                          : current
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setDraftPreview((current) =>
+                                      current
+                                        ? removeDraftMeasure(current, measure.id)
+                                        : current
+                                    )
+                                  }
+                                >
+                                  Remove Measure
+                                </Button>
+                              </div>
+                              <Textarea
+                                value={measure.description}
+                                onChange={(event) =>
+                                  setDraftPreview((current) =>
+                                    current
+                                      ? updateDraftMeasureDescription(
+                                          current,
+                                          measure.id,
+                                          event.target.value
+                                        )
+                                      : current
+                                  )
+                                }
+                                rows={4}
+                                placeholder="Measure description"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => applyDraftBallot(draftPreview)}
+                          >
+                            Apply Draft to Ballot
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </>
