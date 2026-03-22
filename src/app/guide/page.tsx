@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ResearchProgress } from "@/components/guide/research-progress";
 import { RaceSection } from "@/components/guide/race-section";
 import { MeasureCard } from "@/components/guide/measure-card";
+import { PollsCompanion } from "@/components/guide/polls-companion";
 import { FreeGuideBrowser } from "@/components/guide/free-guide-browser";
 import { CollapsibleContent } from "@/components/guide/collapsible-content";
 import { useStreamingResearch } from "@/hooks/useStreamingResearch";
@@ -17,6 +18,7 @@ import { getAccountSummary } from "@/lib/account-client";
 import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
 import { syncFromSupabase } from "@/lib/persistence";
 import { buildRaceRecommendation } from "@/lib/race-recommendations";
+import { rankRaceCandidates } from "@/lib/race-recommendations";
 import type {
   ValuesProfile,
   BallotInput,
@@ -61,6 +63,7 @@ export default function GuidePage() {
   >(null);
   const [measuresCollapsed, setMeasuresCollapsed] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
+  const [pollsMode, setPollsMode] = useState(false);
   const [guideAccess, setGuideAccess] = useState<GuideAccessState | null>(null);
   const prefetchedBallotKeysRef = useRef<Set<string>>(new Set());
 
@@ -206,6 +209,24 @@ export default function GuidePage() {
 
     return links;
   }, [ballotInput, measureResults.length]);
+
+  const pollsCompanionRaces = useMemo(
+    () =>
+      Array.from(resultsByRace.entries()).map(([raceName, candidates]) => {
+        const ranked = rankRaceCandidates(candidates);
+        return {
+          id:
+            ballotInput?.races.find((race) => race.name === raceName)?.id ??
+            raceName,
+          raceName,
+          recommended: ranked.recommended,
+          runnerUp: ranked.runnerUp,
+          explanation: ranked.explanation,
+          hasCloseCall: ranked.hasCloseCall,
+        };
+      }),
+    [ballotInput, resultsByRace]
+  );
 
   const handleSaveAndShare = useCallback(async () => {
     if (
@@ -600,6 +621,15 @@ export default function GuidePage() {
                   {compactMode ? "Expanded View" : "Compact View"}
                 </Button>
               )}
+              {guideAccess?.unlocked &&
+                (results.length > 0 || measureResults.length > 0) && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setPollsMode((current) => !current)}
+                  >
+                    {pollsMode ? "Full Guide" : "Take to Polls"}
+                  </Button>
+                )}
             </div>
           )}
           {storageError && (
@@ -715,8 +745,26 @@ export default function GuidePage() {
             </div>
           )}
 
+        {guideAccess?.unlocked &&
+          pollsMode &&
+          (pollsCompanionRaces.length > 0 || measureResults.length > 0) && (
+            <PollsCompanion
+              heading="Your Quick Ballot"
+              subheading={
+                ballotInput.election
+                  ? `${ballotInput.election.name} • ${new Date(
+                      ballotInput.election.electionDay
+                    ).toLocaleDateString()}`
+                  : ballotInput.state || null
+              }
+              races={pollsCompanionRaces}
+              measures={measureResults}
+              onExit={() => setPollsMode(false)}
+            />
+          )}
+
         {/* Results */}
-        {guideAccess?.unlocked && results.length > 0 && (
+        {guideAccess?.unlocked && !pollsMode && results.length > 0 && (
           <div className="mt-8 space-y-10">
             {sectionLinks.length > 1 && (
               <div className="sticky top-16 z-10 -mb-4 overflow-x-auto rounded-full border border-black/5 bg-background/85 px-3 py-2 backdrop-blur dark:border-white/10">
@@ -749,6 +797,7 @@ export default function GuidePage() {
 
         {/* Ballot Measure Results */}
         {guideAccess?.unlocked &&
+          !pollsMode &&
           measureResults.length > 0 && (
           <div
             id="ballot-measures"
@@ -804,6 +853,7 @@ export default function GuidePage() {
         {/* Share & Navigation */}
         {guideAccess?.unlocked &&
           !isResearching &&
+          !pollsMode &&
           (results.length > 0 || measureResults.length > 0) && (
           <div className="mt-10 border-t pt-6 space-y-4">
             {/* Share section */}

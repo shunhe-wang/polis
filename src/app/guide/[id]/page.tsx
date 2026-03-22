@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { RaceSection } from "@/components/guide/race-section";
 import { CollapsibleContent } from "@/components/guide/collapsible-content";
 import { MeasureCard } from "@/components/guide/measure-card";
+import { PollsCompanion } from "@/components/guide/polls-companion";
 import type { RaceRecommendation, MeasureResult } from "@/lib/types";
 import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
@@ -35,6 +36,7 @@ export default function SharedGuidePage({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [measuresCollapsed, setMeasuresCollapsed] = useState(false);
+  const [pollsMode, setPollsMode] = useState(false);
 
   useEffect(() => {
     async function loadGuide() {
@@ -89,6 +91,25 @@ export default function SharedGuidePage({
     raceName: rec.raceName,
     candidates: rec.candidates,
   }));
+  const pollsCompanionRaces = guide.recommendations.map((rec) => {
+    const recommended =
+      rec.candidates.find(
+        (candidate) => candidate.candidateId === rec.recommendedCandidateId
+      ) ?? rec.candidates[0] ?? null;
+    const runnerUp =
+      rec.candidates.find(
+        (candidate) => candidate.candidateId !== recommended?.candidateId
+      ) ?? null;
+
+    return {
+      id: rec.raceId,
+      raceName: rec.raceName,
+      recommended,
+      runnerUp,
+      explanation: rec.explanation,
+      hasCloseCall: /close call|gets the nod|very close/i.test(rec.explanation),
+    };
+  });
 
   const createdDate = new Date(guide.created_at).toLocaleDateString("en-US", {
     year: "numeric",
@@ -120,10 +141,36 @@ export default function SharedGuidePage({
                 : ""}
             </p>
           )}
+          {(guide.recommendations.length > 0 ||
+            (guide.measure_results?.length ?? 0) > 0) && (
+            <div className="mt-4 flex justify-center">
+              <Button variant="outline" onClick={() => setPollsMode((current) => !current)}>
+                {pollsMode ? "Full Guide" : "Take to Polls"}
+              </Button>
+            </div>
+          )}
         </div>
 
+        {pollsMode &&
+          (pollsCompanionRaces.length > 0 ||
+            (guide.measure_results?.length ?? 0) > 0) && (
+            <PollsCompanion
+              heading="Shared Quick Ballot"
+              subheading={
+                guide.ballot_input.election
+                  ? `${guide.ballot_input.election.name} • ${new Date(
+                      guide.ballot_input.election.electionDay
+                    ).toLocaleDateString()}`
+                  : guide.ballot_input.state || null
+              }
+              races={pollsCompanionRaces}
+              measures={guide.measure_results ?? []}
+              onExit={() => setPollsMode(false)}
+            />
+          )}
+
         {/* Race results */}
-        <div className="space-y-10">
+        {!pollsMode && <div className="space-y-10">
           {raceData.map(({ raceName, candidates }) => (
             <RaceSection
               key={raceName}
@@ -131,10 +178,10 @@ export default function SharedGuidePage({
               candidates={candidates}
             />
           ))}
-        </div>
+        </div>}
 
         {/* Ballot measure results */}
-        {guide.measure_results && guide.measure_results.length > 0 && (
+        {!pollsMode && guide.measure_results && guide.measure_results.length > 0 && (
           <div className="mt-10 rounded-[1.75rem] border border-black/5 bg-white/72 p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <h2 className="text-lg font-semibold tracking-tight">
