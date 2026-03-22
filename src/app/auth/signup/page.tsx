@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { syncToSupabase } from "@/lib/persistence";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +30,7 @@ export default function SignupPage() {
     setIsLoading(true);
     setError(null);
 
-    const { error: authError } = await supabase.auth.signUp({
+    const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -36,6 +39,15 @@ export default function SignupPage() {
       setError(authError.message);
       setIsLoading(false);
     } else {
+      if (data.session) {
+        await syncToSupabase();
+        const returnTo = sessionStorage.getItem("authReturnTo") ?? "/onboarding";
+        sessionStorage.removeItem("authReturnTo");
+        router.push(returnTo);
+        router.refresh();
+        return;
+      }
+
       setSuccess(true);
       setIsLoading(false);
     }
@@ -67,7 +79,8 @@ export default function SignupPage() {
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold tracking-tight">Create Account</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign up to save your values profile and generate voter guides.
+            Sign up to save your values profile, keep your ballot, and unlock 1
+            free starter candidate analysis.
           </p>
         </div>
 

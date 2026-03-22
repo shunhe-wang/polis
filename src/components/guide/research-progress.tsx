@@ -35,7 +35,10 @@ export function ResearchProgress({
           <h2 className="text-lg font-semibold">Researching Candidates</h2>
           <div className="space-y-2">
             {candidates.map((status) => (
-              <Card key={status.candidateId}>
+              <Card
+                key={status.candidateId}
+                className="border border-black/5 bg-white/72 backdrop-blur-sm dark:border-white/10 dark:bg-white/4"
+              >
                 <CardContent className="flex items-center gap-3 py-3">
                   <StatusIcon state={status.state} />
                   <div className="min-w-0 flex-1">
@@ -58,7 +61,10 @@ export function ResearchProgress({
           </h2>
           <div className="space-y-2">
             {measures.map((status) => (
-              <Card key={status.measureId}>
+              <Card
+                key={status.measureId}
+                className="border border-black/5 bg-white/72 backdrop-blur-sm dark:border-white/10 dark:bg-white/4"
+              >
                 <CardContent className="flex items-center gap-3 py-3">
                   <StatusIcon state={status.state} />
                   <div className="min-w-0 flex-1">

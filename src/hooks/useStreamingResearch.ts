@@ -77,12 +77,32 @@ function buildCacheKey(
 function getCachedResults(
   valuesProfile: ValuesProfile,
   ballotInput: BallotInput
-): CandidateResult[] | null {
+): CachedData | null {
   try {
     const key = buildCacheKey(valuesProfile, ballotInput);
     const cached = sessionStorage.getItem(key);
     if (!cached) return null;
-    return JSON.parse(cached) as CandidateResult[];
+    const parsed = JSON.parse(cached) as unknown;
+
+    if (Array.isArray(parsed)) {
+      return {
+        results: parsed as CandidateResult[],
+        measureResults: [],
+      };
+    }
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "results" in parsed &&
+      "measureResults" in parsed &&
+      Array.isArray(parsed.results) &&
+      Array.isArray(parsed.measureResults)
+    ) {
+      return parsed as CachedData;
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -125,18 +145,23 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
       ballotInput: BallotInput,
       options?: { skipCache?: boolean }
     ) => {
+      const expectedCandidateCount = ballotInput.races.reduce(
+        (total, race) => total + race.candidates.length,
+        0
+      );
+      const expectedMeasureCount = ballotInput.measures.length;
+
       // Check cache first (unless explicitly skipping)
       if (!options?.skipCache) {
         const cached = getCachedResults(valuesProfile, ballotInput);
         if (cached) {
-          // Support both old format (array) and new format (object with results + measureResults)
-          const data: CachedData = Array.isArray(cached)
-            ? { results: cached as CandidateResult[], measureResults: [] }
-            : (cached as CachedData);
+          const cacheMatchesRequest =
+            cached.results.length === expectedCandidateCount &&
+            cached.measureResults.length === expectedMeasureCount;
 
-          if (data.results.length > 0 || data.measureResults.length > 0) {
+          if (cacheMatchesRequest) {
             const cachedStatuses: Record<string, CandidateStatus> = {};
-            for (const r of data.results) {
+            for (const r of cached.results) {
               cachedStatuses[r.candidateId] = {
                 candidateId: r.candidateId,
                 name: r.name,
@@ -148,7 +173,7 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
               };
             }
             const cachedMeasureStatuses: Record<string, MeasureStatus> = {};
-            for (const m of data.measureResults) {
+            for (const m of cached.measureResults) {
               cachedMeasureStatuses[m.measureId] = {
                 measureId: m.measureId,
                 title: m.title,
@@ -160,8 +185,8 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
             }
             setStatuses(cachedStatuses);
             setMeasureStatuses(cachedMeasureStatuses);
-            setResults(data.results);
-            setMeasureResults(data.measureResults);
+            setResults(cached.results);
+            setMeasureResults(cached.measureResults);
             setIsResearching(false);
             setError(null);
             return;
@@ -214,6 +239,7 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
         let buffer = "";
         const collectedResults: CandidateResult[] = [];
         const collectedMeasureResults: MeasureResult[] = [];
+        let hasFailures = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -289,6 +315,7 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
 
               case "candidate_error":
                 if (event.candidateId) {
+                  hasFailures = true;
                   setStatuses((prev) => {
                     const existing = prev[event.candidateId!];
                     if (!existing) return prev;
@@ -362,6 +389,7 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
 
               case "measure_error":
                 if (event.measureId) {
+                  hasFailures = true;
                   setMeasureStatuses((prev) => {
                     const existing = prev[event.measureId!];
                     if (!existing) return prev;
@@ -384,10 +412,13 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
           }
         }
 
-        // Cache results after successful completion
+        // Cache only complete successful runs. Partial caches trap the user
+        // in incomplete guides on subsequent loads.
         if (
-          collectedResults.length > 0 ||
-          collectedMeasureResults.length > 0
+          !hasFailures &&
+          collectedResults.length === expectedCandidateCount &&
+          collectedMeasureResults.length === expectedMeasureCount &&
+          (collectedResults.length > 0 || collectedMeasureResults.length > 0)
         ) {
           setCachedResults(valuesProfile, ballotInput, {
             results: collectedResults,

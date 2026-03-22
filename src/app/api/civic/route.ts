@@ -27,7 +27,7 @@ interface CivicResponse {
   error?: { message: string };
 }
 
-function mapLevel(levels: string[] | undefined): Race["level"] {
+export function mapLevel(levels: string[] | undefined): Race["level"] {
   if (!levels || levels.length === 0) return "local";
   const level = levels[0];
   if (level.includes("country")) return "federal";
@@ -49,6 +49,37 @@ function nextRaceId(): string {
 
 interface ElectionsResponse {
   elections?: Array<{ id: string; name: string; electionDay: string }>;
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  const data = (await response.json()) as T;
+
+  if (
+    !response.ok &&
+    (!data ||
+      typeof data !== "object" ||
+      !("error" in (data as Record<string, unknown>)))
+  ) {
+    throw new Error(`Upstream request failed with status ${response.status}`);
+  }
+
+  return data;
+}
+
+export function isMeasureContest(contest: CivicContest): boolean {
+  const type = contest.type.toLowerCase();
+
+  return (
+    type === "ballot-measure" ||
+    type.includes("referendum") ||
+    Boolean(contest.referendumTitle || contest.referendumText)
+  );
+}
+
+export function isRaceContest(contest: CivicContest): boolean {
+  return !isMeasureContest(contest) &&
+    (Boolean(contest.office) || (contest.candidates?.length ?? 0) > 0);
 }
 
 export async function GET(request: NextRequest) {
@@ -82,10 +113,9 @@ export async function GET(request: NextRequest) {
       geocodeUrl.searchParams.set("address", address.trim());
       geocodeUrl.searchParams.set("key", apiKey);
 
-      const geocodeRes = await fetch(geocodeUrl.toString());
-      const geocodeData = (await geocodeRes.json()) as {
+      const geocodeData = await fetchJson<{
         results?: Array<{ formatted_address?: string }>;
-      };
+      }>(geocodeUrl.toString());
 
       if (geocodeData.results && geocodeData.results.length > 0) {
         resolvedAddress =
@@ -100,8 +130,7 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("key", apiKey);
     url.searchParams.set("address", resolvedAddress);
 
-    const response = await fetch(url.toString());
-    const data: CivicResponse = await response.json();
+    const data = await fetchJson<CivicResponse>(url.toString());
 
     if (!data.error) {
       return NextResponse.json(buildResult(data));
@@ -113,8 +142,9 @@ export async function GET(request: NextRequest) {
         "https://www.googleapis.com/civicinfo/v2/elections"
       );
       electionsUrl.searchParams.set("key", apiKey);
-      const electionsRes = await fetch(electionsUrl.toString());
-      const electionsData: ElectionsResponse = await electionsRes.json();
+      const electionsData = await fetchJson<ElectionsResponse>(
+        electionsUrl.toString()
+      );
 
       const elections = (electionsData.elections ?? []).filter(
         (e) => e.id !== "2000" // Skip the VIP test election
@@ -128,8 +158,7 @@ export async function GET(request: NextRequest) {
         elUrl.searchParams.set("address", resolvedAddress);
         elUrl.searchParams.set("electionId", election.id);
 
-        const elRes = await fetch(elUrl.toString());
-        const elData: CivicResponse = await elRes.json();
+        const elData = await fetchJson<CivicResponse>(elUrl.toString());
 
         if (!elData.error && elData.contests && elData.contests.length > 0) {
           return NextResponse.json(buildResult(elData));
@@ -150,7 +179,7 @@ export async function GET(request: NextRequest) {
       err instanceof Error ? err.message : "Failed to fetch civic data";
     return NextResponse.json(
       { error: message, state: null, races: [], measures: [] },
-      { status: 200 }
+      { status: 502 }
     );
   }
 }
@@ -161,7 +190,7 @@ function nextMeasureId(): string {
   return `measure-${measureIdCounter}`;
 }
 
-function inferMeasureType(
+export function inferMeasureType(
   contest: CivicContest
 ): BallotMeasure["type"] {
   const text = (
@@ -175,7 +204,7 @@ function inferMeasureType(
   return "other";
 }
 
-function buildResult(data: CivicResponse): {
+export function buildResult(data: CivicResponse): {
   state: string | null;
   races: Race[];
   measures: BallotMeasure[];
@@ -184,7 +213,7 @@ function buildResult(data: CivicResponse): {
   const state = data.normalizedInput?.state ?? null;
 
   const races: Race[] = (data.contests ?? [])
-    .filter((contest) => contest.type === "General")
+    .filter(isRaceContest)
     .map((contest) => ({
       id: nextRaceId(),
       name: contest.office ?? contest.ballotTitle ?? "Unknown Race",
@@ -197,7 +226,7 @@ function buildResult(data: CivicResponse): {
     }));
 
   const measures: BallotMeasure[] = (data.contests ?? [])
-    .filter((contest) => contest.type === "ballot-measure")
+    .filter(isMeasureContest)
     .map((contest) => ({
       id: nextMeasureId(),
       title: contest.referendumTitle ?? contest.ballotTitle ?? "Ballot Measure",

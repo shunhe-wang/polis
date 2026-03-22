@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { syncToSupabase } from "@/lib/persistence";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,6 +38,7 @@ export default function LoginPage() {
       setError(authError.message);
       setIsLoading(false);
     } else {
+      await syncToSupabase();
       const returnTo = sessionStorage.getItem("authReturnTo") ?? "/onboarding";
       sessionStorage.removeItem("authReturnTo");
       router.push(returnTo);
@@ -50,7 +52,8 @@ export default function LoginPage() {
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold tracking-tight">Sign In</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign in to save your values profile and voter guides.
+            Sign in to keep your ballot, reuse your profile, and access your
+            starter candidate analysis.
           </p>
         </div>
 

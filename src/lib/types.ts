@@ -38,11 +38,28 @@ export const ISSUE_DESCRIPTIONS: Record<Issue, string> = {
   crypto_tech: 'Digital assets, AI regulation, privacy tech, and innovation policy',
 };
 
+export const CORE_ISSUES = [
+  'economy',
+  'healthcare',
+  'housing',
+  'immigration',
+  'climate',
+  'education',
+] as const satisfies readonly Issue[];
+
+export const ADVANCED_ISSUES = [
+  'civil_liberties',
+  'foreign_policy',
+  'crypto_tech',
+] as const satisfies readonly Issue[];
+
 export const POLITICAL_IDENTITIES = [
   'progressive',
+  'liberal',
   'moderate',
   'conservative',
   'libertarian',
+  'independent',
   'prefer_not_to_say',
 ] as const;
 
@@ -50,16 +67,106 @@ export type PoliticalIdentity = (typeof POLITICAL_IDENTITIES)[number];
 
 export const IDENTITY_LABELS: Record<PoliticalIdentity, string> = {
   progressive: 'Progressive',
+  liberal: 'Liberal',
   moderate: 'Moderate',
   conservative: 'Conservative',
   libertarian: 'Libertarian',
+  independent: 'Independent',
   prefer_not_to_say: 'Prefer not to say',
+};
+
+export const POLICY_SIGNALS = [
+  'taxes_and_spending',
+  'immigration_approach',
+  'housing_growth',
+  'social_rights',
+  'energy_and_climate',
+] as const;
+
+export type PolicySignal = (typeof POLICY_SIGNALS)[number];
+
+export const POLICY_SIGNAL_CHOICES = {
+  taxes_and_spending: [
+    'lower_taxes_smaller_government',
+    'balanced_fiscal_approach',
+    'more_public_investment',
+  ],
+  immigration_approach: [
+    'stricter_border_and_enforcement',
+    'balanced_border_and_legal_pathways',
+    'more_open_immigration_and_pathways',
+  ],
+  housing_growth: [
+    'protect_existing_neighborhoods',
+    'balanced_housing_growth',
+    'build_more_housing_even_with_zoning_change',
+  ],
+  social_rights: [
+    'more_traditional_social_policy',
+    'mixed_or_case_by_case',
+    'stronger_protection_for_lgbtq_and_reproductive_rights',
+  ],
+  energy_and_climate: [
+    'lower_energy_costs_and_domestic_production',
+    'balanced_energy_transition',
+    'aggressive_clean_energy_and_emissions_cuts',
+  ],
+} as const;
+
+export type PolicySignalChoice<K extends PolicySignal = PolicySignal> =
+  (typeof POLICY_SIGNAL_CHOICES)[K][number];
+
+export type PolicySignals = {
+  [K in PolicySignal]: PolicySignalChoice<K> | null;
+};
+
+export const POLICY_SIGNAL_LABELS: Record<PolicySignal, string> = {
+  taxes_and_spending: 'Taxes and Government Spending',
+  immigration_approach: 'Immigration and Border Policy',
+  housing_growth: 'Housing Growth and Zoning',
+  social_rights: 'Social Rights and Liberties',
+  energy_and_climate: 'Energy and Climate',
+};
+
+export const POLICY_SIGNAL_CHOICE_LABELS: {
+  [K in PolicySignal]: Record<PolicySignalChoice<K>, string>;
+} = {
+  taxes_and_spending: {
+    lower_taxes_smaller_government: 'Lower taxes, smaller government',
+    balanced_fiscal_approach: 'Pragmatic middle ground',
+    more_public_investment: 'More public investment and services',
+  },
+  immigration_approach: {
+    stricter_border_and_enforcement: 'Stricter border and enforcement',
+    balanced_border_and_legal_pathways: 'Secure border with legal pathways',
+    more_open_immigration_and_pathways: 'More open immigration and pathways',
+  },
+  housing_growth: {
+    protect_existing_neighborhoods: 'Protect neighborhood character',
+    balanced_housing_growth: 'Balanced growth',
+    build_more_housing_even_with_zoning_change:
+      'Build much more housing, even with zoning changes',
+  },
+  social_rights: {
+    more_traditional_social_policy: 'More traditional restrictions',
+    mixed_or_case_by_case: 'Mixed or case-by-case',
+    stronger_protection_for_lgbtq_and_reproductive_rights:
+      'Stronger LGBTQ and reproductive rights protections',
+  },
+  energy_and_climate: {
+    lower_energy_costs_and_domestic_production:
+      'Lower energy costs and more domestic production',
+    balanced_energy_transition: 'Balanced transition',
+    aggressive_clean_energy_and_emissions_cuts:
+      'Aggressive clean energy and emissions cuts',
+  },
 };
 
 // ─── Values Profile ────────────────────────────────────────────────
 
 export interface ValuesProfile {
   issueRatings: Record<Issue, number>; // 1–5
+  policySignals: PolicySignals;
   freeText: string;
   politicalIdentity: PoliticalIdentity | null;
 }
@@ -69,10 +176,34 @@ export function createEmptyValuesProfile(): ValuesProfile {
   for (const issue of ISSUES) {
     issueRatings[issue] = 3; // default to middle
   }
+  const policySignals = {} as PolicySignals;
+  for (const signal of POLICY_SIGNALS) {
+    policySignals[signal] = null;
+  }
   return {
     issueRatings,
+    policySignals,
     freeText: '',
     politicalIdentity: null,
+  };
+}
+
+export function hydrateValuesProfile(
+  value: Partial<ValuesProfile> | null | undefined
+): ValuesProfile {
+  const empty = createEmptyValuesProfile();
+
+  return {
+    issueRatings: {
+      ...empty.issueRatings,
+      ...(value?.issueRatings ?? {}),
+    },
+    policySignals: {
+      ...empty.policySignals,
+      ...(value?.policySignals ?? {}),
+    },
+    freeText: value?.freeText ?? '',
+    politicalIdentity: value?.politicalIdentity ?? null,
   };
 }
 

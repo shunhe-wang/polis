@@ -3,13 +3,12 @@
 import { useEffect, useState, use } from "react";
 import { RaceSection } from "@/components/guide/race-section";
 import { MeasureCard } from "@/components/guide/measure-card";
-import type { RaceRecommendation, CandidateResult, MeasureResult } from "@/lib/types";
+import type { RaceRecommendation, MeasureResult } from "@/lib/types";
 import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 
 interface SavedGuide {
   id: string;
-  values_profile: Record<string, unknown>;
   ballot_input: { state: string };
   recommendations: RaceRecommendation[];
   measure_results?: MeasureResult[] | null;

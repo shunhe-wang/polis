@@ -26,8 +26,9 @@ export function AddressLookup({ onLookup, isLoading }: AddressLookupProps) {
         <Label htmlFor="address">Your Address or Zip Code</Label>
         <p className="text-xs text-muted-foreground">
           Enter your full address or just a zip code to find your voting
-          districts and the candidates on your ballot. Your address is not
-          stored.
+          districts and the candidates on your ballot. It stays in your
+          browser unless you sign in, in which case it can be saved to your
+          account so you can resume later.
         </p>
         <Input
           id="address"

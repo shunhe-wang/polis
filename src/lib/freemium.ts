@@ -1,39 +1,41 @@
-// Freemium gating logic.
-// For MVP, "Pro" is determined by whether the user is signed in.
-// This can be swapped for Stripe subscription checks later.
+export type UserTier = "guest" | "free" | "pro";
 
-import { createClient } from "@/lib/supabase/client";
-
-export type UserTier = "free" | "pro";
-
-export async function getUserTier(): Promise<UserTier> {
-  const supabase = createClient();
-  if (!supabase) return "free";
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // For MVP: signed in = Pro
-  return user ? "pro" : "free";
+export interface AccountSummary {
+  tier: UserTier;
+  isAuthenticated: boolean;
+  starterAnalysesRemaining: number;
 }
+
+export const DEFAULT_ACCOUNT_SUMMARY: AccountSummary = {
+  tier: "guest",
+  isAuthenticated: false,
+  starterAnalysesRemaining: 0,
+};
 
 export function canAccessFeature(
   tier: UserTier,
-  feature: "values_profile" | "research" | "share" | "admin"
+  feature:
+    | "values_profile"
+    | "starter_analysis"
+    | "research"
+    | "share"
+    | "admin"
 ): boolean {
   switch (feature) {
     case "values_profile":
-      // Everyone can fill out the questionnaire (teaser)
+      // Anyone can complete onboarding.
       return true;
+    case "starter_analysis":
+      // Starter analysis is available to signed-in free users and Pro.
+      return tier === "free" || tier === "pro";
     case "research":
-      // Only Pro users can generate personalized research
+      // Full-ballot personalized research is Pro-only.
       return tier === "pro";
     case "share":
-      // Only Pro users can save and share
+      // Save/share stays Pro-only until billing is wired up.
       return tier === "pro";
     case "admin":
-      // Admin is Pro only
+      // Admin is still separate server-side allowlist.
       return tier === "pro";
   }
 }

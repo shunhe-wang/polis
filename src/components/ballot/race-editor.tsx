@@ -88,6 +88,7 @@ export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
   const [showAddRace, setShowAddRace] = useState(false);
   const [newRaceName, setNewRaceName] = useState("");
   const [lookingUp, setLookingUp] = useState<string | null>(null);
+  const [lookupMessage, setLookupMessage] = useState<string | null>(null);
   const [districtInput, setDistrictInput] = useState("");
   const [pendingTemplate, setPendingTemplate] = useState<RaceTemplate | null>(
     null
@@ -99,6 +100,7 @@ export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
 
   const lookUpCandidates = async (raceId: string, raceName: string) => {
     setLookingUp(raceId);
+    setLookupMessage(null);
     try {
       const res = await fetch("/api/candidates", {
         method: "POST",
@@ -106,26 +108,55 @@ export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
         body: JSON.stringify({ raceName, state: state ?? "" }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        setLookupMessage(
+          typeof data?.error === "string"
+            ? data.error
+            : "Candidate lookup is unavailable right now."
+        );
+        return;
+      }
+
       if (data.candidates && data.candidates.length > 0) {
         onRacesChange(
           racesRef.current.map((race) => {
             if (race.id !== raceId) return race;
-            const newCandidates: Candidate[] = data.candidates.map(
-              (c: { name: string; party: string | null }) => ({
+
+            const existingKeys = new Set(
+              race.candidates.map((candidate) =>
+                `${candidate.name.toLowerCase()}::${candidate.party ?? ""}`
+              )
+            );
+
+            const newCandidates: Candidate[] = data.candidates
+              .filter((c: { name: string; party: string | null }) => {
+                const key = `${c.name.toLowerCase()}::${c.party ?? ""}`;
+                return !existingKeys.has(key);
+              })
+              .map((c: { name: string; party: string | null }) => ({
                 id: genId("candidate"),
                 name: c.name,
                 party: c.party,
-              })
-            );
+              }));
+
+            if (newCandidates.length === 0) {
+              setLookupMessage("No new candidates found for that race.");
+              return race;
+            }
+
             return {
               ...race,
               candidates: [...race.candidates, ...newCandidates],
             };
           })
         );
+      } else {
+        setLookupMessage("No candidates found. You can add them manually.");
       }
     } catch {
-      // Silently fail — user can still add candidates manually
+      setLookupMessage(
+        "Candidate lookup failed. You can still add candidates manually."
+      );
     } finally {
       setLookingUp(null);
     }
@@ -293,6 +324,10 @@ export function RaceEditor({ races, onRacesChange, state }: RaceEditorProps) {
           }
         />
       ))}
+
+      {lookupMessage && (
+        <p className="text-xs text-muted-foreground">{lookupMessage}</p>
+      )}
     </div>
   );
 }

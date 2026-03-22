@@ -6,7 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AddressLookup } from "@/components/ballot/address-lookup";
 import { RaceEditor } from "@/components/ballot/race-editor";
-import type { Race, BallotMeasure, ValuesProfile, BallotInput } from "@/lib/types";
+import {
+  hydrateValuesProfile,
+  type Race,
+  type BallotMeasure,
+  type ValuesProfile,
+  type BallotInput,
+} from "@/lib/types";
+import { saveBallotInput, syncFromSupabase } from "@/lib/persistence";
 
 interface CivicApiResponse {
   state: string | null;
@@ -27,15 +34,60 @@ export default function BallotPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const [returnToGuide, setReturnToGuide] = useState(false);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("valuesProfile");
-    if (!stored) {
-      router.push("/onboarding");
-      return;
+    async function load() {
+      const params = new URLSearchParams(window.location.search);
+      setReturnToGuide(params.get("returnTo") === "guide");
+
+      await syncFromSupabase();
+
+      const stored = sessionStorage.getItem("valuesProfile");
+      if (!stored) {
+        router.push("/onboarding");
+        return;
+      }
+
+      setValuesProfile(
+        hydrateValuesProfile(JSON.parse(stored) as Partial<ValuesProfile>)
+      );
+
+      const ballotStr = sessionStorage.getItem("ballotInput");
+      if (ballotStr) {
+        const ballot = JSON.parse(ballotStr) as BallotInput;
+        setAddress(ballot.address);
+        setState(ballot.state || null);
+        setRaces(ballot.races ?? []);
+        setMeasures(ballot.measures ?? []);
+        setHasSearched(true);
+      }
+
+      setHasHydrated(true);
     }
-    setValuesProfile(JSON.parse(stored) as ValuesProfile);
+
+    load();
   }, [router]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    const ballotInput: BallotInput = {
+      address,
+      state: state ?? "",
+      races,
+      measures,
+    };
+
+    sessionStorage.setItem("ballotInput", JSON.stringify(ballotInput));
+
+    const timeout = window.setTimeout(() => {
+      void saveBallotInput(ballotInput);
+    }, 400);
+
+    return () => window.clearTimeout(timeout);
+  }, [address, state, races, measures, hasHydrated]);
 
   const handleLookup = async (addr: string) => {
     setAddress(addr);
@@ -48,6 +100,16 @@ export default function BallotPage() {
         `/api/civic?address=${encodeURIComponent(addr)}`
       );
       const data: CivicApiResponse = await res.json();
+
+      if (!res.ok) {
+        setLookupError(
+          data.error || "Ballot lookup is temporarily unavailable."
+        );
+        setState(null);
+        setRaces([]);
+        setMeasures([]);
+        return;
+      }
 
       if (data.error) {
         setLookupError(data.error);
@@ -80,6 +142,7 @@ export default function BallotPage() {
     };
 
     sessionStorage.setItem("ballotInput", JSON.stringify(ballotInput));
+    void saveBallotInput(ballotInput);
     router.push("/guide");
   };
 
@@ -100,6 +163,26 @@ export default function BallotPage() {
             manually.
           </p>
         </div>
+
+        {returnToGuide && (
+          <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">Editing your ballot</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  You can go back to your guide anytime. Your current ballot is
+                  already saved.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/guide")}
+              >
+                Back to Guide
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Address Lookup */}
         <Card>
@@ -179,11 +262,21 @@ export default function BallotPage() {
 
         {/* Continue */}
         <div className="mt-8 flex items-center justify-between">
-          <Button variant="ghost" onClick={() => router.push("/onboarding")}>
-            Back
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={() => router.push("/onboarding")}>
+              Back
+            </Button>
+            {returnToGuide && (
+              <Button
+                variant="outline"
+                onClick={() => router.push("/guide")}
+              >
+                Back to Guide
+              </Button>
+            )}
+          </div>
           <Button onClick={handleContinue} disabled={!canContinue}>
-            Generate Voter Guide
+            {returnToGuide ? "Update Guide" : "Generate Voter Guide"}
           </Button>
         </div>
 

@@ -23,7 +23,13 @@ export function CandidateCard({ result, isRecommended }: CandidateCardProps) {
         : "text-red-700 bg-red-50 border-red-200";
 
   return (
-    <Card className={isRecommended ? "ring-2 ring-primary" : ""}>
+    <Card
+      className={
+        isRecommended
+          ? "border border-primary/20 bg-white/80 shadow-[0_20px_60px_-35px_rgba(8,47,73,0.45)] ring-2 ring-primary/15 backdrop-blur-sm dark:bg-white/6"
+          : "border border-black/5 bg-white/72 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4"
+      }
+    >
       <CardContent className="pt-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
@@ -41,7 +47,7 @@ export function CandidateCard({ result, isRecommended }: CandidateCardProps) {
             )}
           </div>
           <div
-            className={`rounded-lg border px-3 py-1 text-center ${scoreColor}`}
+            className={`rounded-2xl border px-3 py-2 text-center shadow-sm ${scoreColor}`}
           >
             <p className="text-xl font-bold">{result.alignmentScore}</p>
             <p className="text-[10px] uppercase tracking-wide">Alignment</p>
@@ -106,7 +112,7 @@ export function CandidateCard({ result, isRecommended }: CandidateCardProps) {
           variant="ghost"
           size="sm"
           onClick={() => setShowDetails(!showDetails)}
-          className="w-full text-xs"
+          className="w-full rounded-full text-xs"
         >
           {showDetails ? "Hide Details" : "How We Decided This"}
         </Button>

@@ -6,17 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StepProgress } from "@/components/onboarding/step-progress";
 import { IssueRater } from "@/components/onboarding/issue-rater";
+import { PolicySignalSelector } from "@/components/onboarding/policy-signal-selector";
 import { FreeTextInput } from "@/components/onboarding/free-text-input";
 import { IdentitySelector } from "@/components/onboarding/identity-selector";
 import {
   type Issue,
+  type PolicySignal,
   type PoliticalIdentity,
   type ValuesProfile,
   createEmptyValuesProfile,
 } from "@/lib/types";
 import { saveValuesProfile } from "@/lib/persistence";
 
-const STEP_LABELS = ["Rate Issues", "Your Priorities", "Identity"];
+const STEP_LABELS = [
+  "Rate Issues",
+  "Policy Leanings",
+  "Your Priorities",
+  "Identity",
+];
 const TOTAL_STEPS = STEP_LABELS.length;
 
 export default function OnboardingPage() {
@@ -37,6 +44,16 @@ export default function OnboardingPage() {
     setProfile((prev) => ({ ...prev, freeText: value }));
   }, []);
 
+  const handlePolicySignalChange = useCallback(
+    (signal: PolicySignal, value: ValuesProfile["policySignals"][PolicySignal]) => {
+      setProfile((prev) => ({
+        ...prev,
+        policySignals: { ...prev.policySignals, [signal]: value },
+      }));
+    },
+    []
+  );
+
   const handleIdentityChange = useCallback(
     (value: PoliticalIdentity | null) => {
       setProfile((prev) => ({ ...prev, politicalIdentity: value }));
@@ -50,9 +67,12 @@ export default function OnboardingPage() {
         // Issue ratings always have defaults, so always valid
         return true;
       case 1:
-        // Free text is optional
+        // Policy signals are optional
         return true;
       case 2:
+        // Free text is optional
+        return true;
+      case 3:
         // Identity is optional
         return true;
       default:
@@ -109,12 +129,18 @@ export default function OnboardingPage() {
               />
             )}
             {step === 1 && (
+              <PolicySignalSelector
+                value={profile.policySignals}
+                onChange={handlePolicySignalChange}
+              />
+            )}
+            {step === 2 && (
               <FreeTextInput
                 value={profile.freeText}
                 onChange={handleFreeTextChange}
               />
             )}
-            {step === 2 && (
+            {step === 3 && (
               <IdentitySelector
                 value={profile.politicalIdentity}
                 onChange={handleIdentityChange}

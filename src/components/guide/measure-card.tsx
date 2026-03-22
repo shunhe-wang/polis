@@ -27,7 +27,7 @@ export function MeasureCard({ result }: MeasureCardProps) {
         : "Neutral";
 
   return (
-    <Card>
+    <Card className="border border-black/5 bg-white/72 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4">
       <CardContent className="pt-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
@@ -37,7 +37,7 @@ export function MeasureCard({ result }: MeasureCardProps) {
             </p>
           </div>
           <div className="flex flex-col items-center gap-1 shrink-0">
-            <div className="flex h-14 w-14 items-center justify-center rounded-lg border-2 border-green-200 bg-green-50 text-lg font-bold text-green-700">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-green-200 bg-green-50 text-lg font-bold text-green-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-300">
               {result.alignmentScore}
             </div>
             <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">

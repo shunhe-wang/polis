@@ -6,16 +6,37 @@ import { Button } from "@/components/ui/button";
 import { ResearchProgress } from "@/components/guide/research-progress";
 import { RaceSection } from "@/components/guide/race-section";
 import { MeasureCard } from "@/components/guide/measure-card";
-import { ProGate } from "@/components/layout/pro-gate";
+import { FreeGuideBrowser } from "@/components/guide/free-guide-browser";
 import { useStreamingResearch } from "@/hooks/useStreamingResearch";
-import { getUserTier, canAccessFeature, type UserTier } from "@/lib/freemium";
+import {
+  canAccessFeature,
+  DEFAULT_ACCOUNT_SUMMARY,
+  type AccountSummary,
+} from "@/lib/freemium";
+import { getAccountSummary } from "@/lib/account-client";
 import { syncFromSupabase } from "@/lib/persistence";
 import type {
   ValuesProfile,
   BallotInput,
   CandidateResult,
   RaceRecommendation,
+  Race,
+  Candidate,
 } from "@/lib/types";
+import { hydrateValuesProfile } from "@/lib/types";
+
+interface StarterAnalysisCache {
+  result: CandidateResult;
+}
+
+function buildStarterCacheKey(
+  valuesProfile: ValuesProfile,
+  ballotInput: BallotInput
+): string {
+  const profileHash = JSON.stringify(valuesProfile);
+  const ballotHash = JSON.stringify(ballotInput);
+  return `starter_analysis_${btoa(profileHash + ballotHash).slice(0, 64)}`;
+}
 
 export default function GuidePage() {
   const router = useRouter();
@@ -27,8 +48,16 @@ export default function GuidePage() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [userTier, setUserTier] = useState<UserTier>("free");
+  const [account, setAccount] = useState<AccountSummary>(
+    DEFAULT_ACCOUNT_SUMMARY
+  );
   const [tierLoaded, setTierLoaded] = useState(false);
+  const [starterResult, setStarterResult] =
+    useState<CandidateResult | null>(null);
+  const [starterError, setStarterError] = useState<string | null>(null);
+  const [analyzingCandidateId, setAnalyzingCandidateId] = useState<
+    string | null
+  >(null);
   const skipCacheRef = useRef(false);
 
   const {
@@ -55,12 +84,39 @@ export default function GuidePage() {
         return;
       }
 
-      setValuesProfile(JSON.parse(profileStr) as ValuesProfile);
-      setBallotInput(JSON.parse(ballotStr) as BallotInput);
+      setValuesProfile(
+        hydrateValuesProfile(JSON.parse(profileStr) as Partial<ValuesProfile>)
+      );
+      const parsedBallot = JSON.parse(ballotStr) as BallotInput;
+      setBallotInput(parsedBallot);
 
-      const tier = await getUserTier();
-      setUserTier(tier);
+      const summary = await getAccountSummary();
+      setAccount(summary);
       setTierLoaded(true);
+
+      try {
+        const cached = sessionStorage.getItem(
+          buildStarterCacheKey(
+            hydrateValuesProfile(
+              JSON.parse(profileStr) as Partial<ValuesProfile>
+            ),
+            parsedBallot
+          )
+        );
+        if (cached) {
+          const parsed = JSON.parse(cached) as StarterAnalysisCache;
+          const stillOnBallot = parsedBallot.races.some((race) =>
+            race.candidates.some(
+              (candidate) => candidate.id === parsed.result.candidateId
+            )
+          );
+          if (stillOnBallot) {
+            setStarterResult(parsed.result);
+          }
+        }
+      } catch {
+        // Ignore stale starter-analysis cache.
+      }
     }
     load();
   }, [router]);
@@ -72,7 +128,7 @@ export default function GuidePage() {
       ballotInput &&
       !hasStarted &&
       tierLoaded &&
-      canAccessFeature(userTier, "research")
+      canAccessFeature(account.tier, "research")
     ) {
       setHasStarted(true);
       startResearch(valuesProfile, ballotInput, {
@@ -80,7 +136,14 @@ export default function GuidePage() {
       });
       skipCacheRef.current = false;
     }
-  }, [valuesProfile, ballotInput, hasStarted, startResearch, userTier, tierLoaded]);
+  }, [
+    valuesProfile,
+    ballotInput,
+    hasStarted,
+    startResearch,
+    account.tier,
+    tierLoaded,
+  ]);
 
   // Group results by race
   const resultsByRace = useMemo(() => {
@@ -92,6 +155,19 @@ export default function GuidePage() {
     }
     return grouped;
   }, [results]);
+
+  const raceIdByCandidateId = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!ballotInput) return map;
+
+    for (const race of ballotInput.races) {
+      for (const candidate of race.candidates) {
+        map.set(candidate.id, race.id);
+      }
+    }
+
+    return map;
+  }, [ballotInput]);
 
   const handleSaveAndShare = useCallback(async () => {
     if (
@@ -118,8 +194,10 @@ export default function GuidePage() {
         (a, b) => b.alignmentScore - a.alignmentScore
       );
       const recommended = sorted[0];
+      const raceId =
+        raceIdByCandidateId.get(candidates[0].candidateId) ?? raceName;
       recommendations.push({
-        raceId: candidates[0].candidateId,
+        raceId,
         raceName,
         candidates: sorted,
         recommendedCandidateId:
@@ -148,6 +226,8 @@ export default function GuidePage() {
         const msg =
           data && typeof data === "object" && "error" in data
             ? String(data.error)
+            : res.status === 401
+              ? "Sign in to save and share your guide."
             : "Failed to save guide";
         setSaveError(msg);
         return;
@@ -166,7 +246,80 @@ export default function GuidePage() {
     } finally {
       setIsSaving(false);
     }
-  }, [valuesProfile, ballotInput, results, measureResults]);
+  }, [valuesProfile, ballotInput, results, measureResults, raceIdByCandidateId]);
+
+  const handleStarterAnalysis = useCallback(
+    async (candidate: Candidate, race: Race) => {
+      if (!valuesProfile || !ballotInput) return;
+
+      setStarterError(null);
+      setAnalyzingCandidateId(candidate.id);
+
+      try {
+        const response = await fetch("/api/starter-analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            valuesProfile,
+            candidate,
+            race,
+            state: ballotInput.state,
+          }),
+        });
+
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message =
+            data && typeof data === "object" && "error" in data
+              ? String(data.error)
+              : "Starter analysis failed";
+          setStarterError(message);
+          return;
+        }
+
+        if (
+          !data ||
+          typeof data !== "object" ||
+          !("result" in data) ||
+          !data.result
+        ) {
+          setStarterError("Starter analysis returned no result.");
+          return;
+        }
+
+        const nextResult = data.result as CandidateResult;
+        setStarterResult(nextResult);
+        setAccount((current) => ({
+          ...current,
+          starterAnalysesRemaining:
+            typeof data.starterAnalysesRemaining === "number"
+              ? data.starterAnalysesRemaining
+              : current.starterAnalysesRemaining,
+        }));
+        sessionStorage.setItem(
+          buildStarterCacheKey(valuesProfile, ballotInput),
+          JSON.stringify({ result: nextResult } satisfies StarterAnalysisCache)
+        );
+      } catch {
+        setStarterError("Starter analysis failed. Please try again.");
+      } finally {
+        setAnalyzingCandidateId(null);
+      }
+    },
+    [valuesProfile, ballotInput]
+  );
+
+  const goToAuth = useCallback(
+    (path: string) => {
+      sessionStorage.setItem("authReturnTo", "/guide");
+      router.push(path);
+    },
+    [router]
+  );
+
+  const goToBallotEditor = useCallback(() => {
+    router.push("/ballot?returnTo=guide");
+  }, [router]);
 
   if (!valuesProfile || !ballotInput) {
     return null;
@@ -181,25 +334,34 @@ export default function GuidePage() {
             Your Voter Guide
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {isResearching
+            {!tierLoaded
+              ? "Preparing your guide..."
+              : canAccessFeature(account.tier, "research") && isResearching
               ? "Sit tight — we're doing deep research on each item to give you comprehensive, cited results. This may take a few minutes."
-              : results.length > 0 || measureResults.length > 0
+              : canAccessFeature(account.tier, "research") &&
+                  (results.length > 0 || measureResults.length > 0)
                 ? "Here are your personalized recommendations."
-                : hasStarted
-                  ? "Research complete."
-                  : "Preparing your guide..."}
+                : account.tier === "free"
+                  ? account.starterAnalysesRemaining > 0
+                    ? "Browse your ballot, open source links, and use your free starter analysis on one candidate."
+                    : "Browse your ballot and open source links. Your free starter analysis has already been used."
+                  : account.tier === "guest"
+                    ? "Browse your ballot now, then create a free account to unlock one starter candidate analysis."
+                  : hasStarted
+                    ? "Research complete."
+                    : "Preparing your guide..."}
           </p>
+          {tierLoaded && (
+            <div className="mt-4 flex justify-center">
+              <Button variant="outline" onClick={goToBallotEditor}>
+                Edit Ballot
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Freemium gate */}
-        {tierLoaded && !canAccessFeature(userTier, "research") && (
-          <div className="mb-8">
-            <ProGate feature="Personalized Voter Guide" />
-          </div>
-        )}
-
         {/* Error state */}
-        {error && (
+        {canAccessFeature(account.tier, "research") && error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
             <p className="font-medium">Something went wrong</p>
             <p className="mt-1">{error}</p>
@@ -216,8 +378,24 @@ export default function GuidePage() {
           </div>
         )}
 
+        {/* Free tier candidate browser */}
+        {tierLoaded && !canAccessFeature(account.tier, "research") && (
+          <FreeGuideBrowser
+            ballotInput={ballotInput}
+            userTier={account.tier}
+            starterAnalysesRemaining={account.starterAnalysesRemaining}
+            starterResult={starterResult}
+            starterError={starterError}
+            analyzingCandidateId={analyzingCandidateId}
+            onAnalyzeCandidate={handleStarterAnalysis}
+            onSignUp={() => goToAuth("/auth/signup")}
+            onSignIn={() => goToAuth("/auth/login")}
+            onEditBallot={goToBallotEditor}
+          />
+        )}
+
         {/* Research progress */}
-        {isResearching && (
+        {canAccessFeature(account.tier, "research") && isResearching && (
           <ResearchProgress
             statuses={statuses}
             measureStatuses={measureStatuses}
@@ -225,7 +403,8 @@ export default function GuidePage() {
         )}
 
         {/* Per-candidate errors (when research finished but no results) */}
-        {!isResearching &&
+        {canAccessFeature(account.tier, "research") &&
+          !isResearching &&
           results.length === 0 &&
           Object.values(statuses).some((s) => s.state === "error") && (
             <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -249,7 +428,7 @@ export default function GuidePage() {
           )}
 
         {/* Results */}
-        {results.length > 0 && (
+        {canAccessFeature(account.tier, "research") && results.length > 0 && (
           <div className="mt-8 space-y-10">
             {Array.from(resultsByRace.entries()).map(
               ([raceName, candidates]) => (
@@ -264,7 +443,8 @@ export default function GuidePage() {
         )}
 
         {/* Ballot Measure Results */}
-        {measureResults.length > 0 && (
+        {canAccessFeature(account.tier, "research") &&
+          measureResults.length > 0 && (
           <div className="mt-10 space-y-6">
             <h2 className="text-lg font-semibold">Ballot Measures</h2>
             {measureResults.map((m) => (
@@ -274,7 +454,8 @@ export default function GuidePage() {
         )}
 
         {/* Measure research progress */}
-        {isResearching &&
+        {canAccessFeature(account.tier, "research") &&
+          isResearching &&
           Object.values(measureStatuses).some(
             (s) => s.state === "researching"
           ) && (
@@ -294,7 +475,8 @@ export default function GuidePage() {
           )}
 
         {/* Share & Navigation */}
-        {!isResearching &&
+        {canAccessFeature(account.tier, "research") &&
+          !isResearching &&
           (results.length > 0 || measureResults.length > 0) && (
           <div className="mt-10 border-t pt-6 space-y-4">
             {/* Share section */}
@@ -331,7 +513,7 @@ export default function GuidePage() {
             <div className="flex items-center justify-between">
               <Button
                 variant="ghost"
-                onClick={() => router.push("/ballot")}
+                onClick={goToBallotEditor}
               >
                 Edit Ballot
               </Button>
