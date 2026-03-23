@@ -11,8 +11,8 @@ import { canAccessFeature } from "@/lib/freemium";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import { lookupGoogleCivicBallot } from "@/lib/ballot-sources/google-civic";
 import {
-  classifyDeterministicStatewideRace,
-  findDeterministicStatewideCandidates,
+  findDeterministicCandidates,
+  isDeterministicOfficeLookup,
 } from "@/lib/deterministic-candidate-lookup";
 import { getSameOriginError } from "@/lib/csrf";
 
@@ -121,12 +121,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const requestedDeterministicRace =
-      classifyDeterministicStatewideRace(raceName);
-    if (requestedDeterministicRace && address) {
+    if (address) {
       try {
         const civic = await lookupGoogleCivicBallot({ address, electionId });
-        const deterministicCandidates = findDeterministicStatewideCandidates(
+        const deterministicCandidates = findDeterministicCandidates(
           civic.races,
           raceName
         );
@@ -138,6 +136,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             })),
             error: null,
           } satisfies CandidateLookupResult);
+        }
+
+        if (civic.races.length > 0 && isDeterministicOfficeLookup(raceName)) {
+          return NextResponse.json(
+            {
+              candidates: [],
+              error:
+                "Polis could not match that office to a unique race on this ballot. Add the district or locality more specifically, or add candidates manually.",
+            } satisfies CandidateLookupResult,
+            { status: 422 }
+          );
         }
       } catch {
         // If the deterministic path fails, fall back to the paid AI lookup.
