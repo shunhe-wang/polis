@@ -110,6 +110,7 @@ export async function GET(request: NextRequest) {
       address: civic.resolvedAddress || address,
       state: civic.locality?.state ?? civic.state,
       city: civic.locality?.city ?? null,
+      county: null,
       election: civic.election,
     });
 
@@ -189,6 +190,8 @@ export async function GET(request: NextRequest) {
           fallbackLinks: buildBallotFallbackLinks({
             address,
             state: null,
+            city: null,
+            county: null,
             election: null,
           }),
           locality: null,

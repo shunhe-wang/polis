@@ -864,9 +864,23 @@ export default function BallotPage() {
                 <p className="mt-1 text-muted-foreground">
                   {importMeta.message}
                 </p>
+                {importMeta.status !== "complete" && (
+                  <div className="mt-3 rounded-lg border border-primary/10 bg-primary/5 p-3">
+                    <p className="text-sm font-medium">Best next steps</p>
+                    <ol className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      <li>1. Open an official election or sample-ballot link below.</li>
+                      <li>2. Compare it against the races shown here.</li>
+                      <li>3. Add missing races manually, or paste/upload the ballot for review above.</li>
+                    </ol>
+                  </div>
+                )}
                 {importMeta.fallbackLinks.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {importMeta.fallbackLinks.map((link) => (
+                  <div className="mt-3">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      Official recovery links
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {importMeta.fallbackLinks.map((link) => (
                       <a
                         key={`${link.kind}-${link.url}`}
                         href={link.url}
@@ -876,7 +890,8 @@ export default function BallotPage() {
                       >
                         {link.label}
                       </a>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -891,8 +906,9 @@ export default function BallotPage() {
                 </div>
                 {importMeta.status !== "complete" && (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Use the official source above to verify missing races or
-                    measures, then finish editing below.
+                    If Google Civic is missing local contests today, come back
+                    later too. Election offices often publish more complete
+                    sample ballots closer to election day.
                   </p>
                 )}
               </div>

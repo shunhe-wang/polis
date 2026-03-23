@@ -49,12 +49,6 @@ export function PollsCompanion({
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
-              Large text
-            </Badge>
-            <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
-              Quick reference
-            </Badge>
             <Button variant="outline" onClick={onExit}>
               Back to Full Guide
             </Button>

@@ -7,12 +7,18 @@ function encodeSearch(query: string): string {
 export function buildBallotFallbackLinks(input: {
   address: string;
   state: string | null;
+  city?: string | null;
+  county?: string | null;
   election: BallotElectionContext | null;
 }): BallotFallbackLink[] {
-  const location = input.address || input.state || "my address";
+  const localityBits = [input.city, input.county, input.state]
+    .map((value) => value?.trim())
+    .filter(Boolean);
+  const location =
+    input.address || localityBits.join(", ") || input.state || "my address";
   const electionLabel = input.election?.name ?? "upcoming election";
   const officialQuery = `site:.gov ${location} sample ballot ${electionLabel}`;
-  const officeQuery = `site:.gov ${input.state || location} election office sample ballot`;
+  const officeQuery = `site:.gov ${location} election office sample ballot`;
   const newsQuery = `"${location}" "${electionLabel}" candidate guide`;
 
   return [
@@ -64,7 +70,7 @@ export function getBallotSourceNotice(
     : "ballot import";
 
   if (raceCount === 0 && measureCount === 0) {
-    return `We could not import your ${electionCopy} from Google Civic. Check an official sample ballot and add races manually if needed.`;
+    return `We could not import your ${electionCopy} from Google Civic. Open an official election source, then add missing races manually or upload/paste the ballot for review.`;
   }
 
   if (measureCount === 0) {

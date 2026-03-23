@@ -1,12 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildBallotFallbackLinks } from "@/lib/ballot-fallbacks";
 import { buildJurisdictionKey, normalizeStateCode } from "@/lib/jurisdiction";
+import { getStateVotingPage } from "@/lib/state-voting-pages";
 import type { BallotElectionContext, BallotFallbackLink } from "@/lib/types";
 
 interface FallbackRow {
   official_elections_url: string;
   official_sample_ballot_url: string | null;
   official_voter_lookup_url: string | null;
+}
+
+function rankFallbackLink(link: BallotFallbackLink): number {
+  if (link.kind === "official") {
+    if (link.label.toLowerCase().includes("sample ballot")) return 0;
+    if (link.label.toLowerCase().includes("voter lookup")) return 1;
+    if (link.label.toLowerCase().includes("vote.gov")) return 2;
+    if (link.label.toLowerCase().includes("election office")) return 3;
+    return 4;
+  }
+
+  if (link.kind === "official_search") return 5;
+  if (link.kind === "reference") return 6;
+  return 7;
 }
 
 export async function resolveOfficialFallbackLinks(
@@ -76,9 +91,20 @@ export async function resolveOfficialFallbackLinks(
     }
   }
 
+  const stateVotingPage = getStateVotingPage(state);
+  if (stateVotingPage) {
+    fallbackLinks.push({
+      label: stateVotingPage.label,
+      url: stateVotingPage.url,
+      kind: "official",
+    });
+  }
+
   const generic = buildBallotFallbackLinks({
     address: input.address,
     state,
+    city: input.city,
+    county: input.county ?? null,
     election: input.election,
   });
 
@@ -89,5 +115,7 @@ export async function resolveOfficialFallbackLinks(
     }
   }
 
-  return Array.from(deduped.values());
+  return Array.from(deduped.values()).sort(
+    (left, right) => rankFallbackLink(left) - rankFallbackLink(right)
+  );
 }
