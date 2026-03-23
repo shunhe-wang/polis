@@ -13,6 +13,11 @@ import {
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import { isValidBallotReviewDraft } from "@/lib/validation";
 import { getSameOriginError } from "@/lib/csrf";
+import {
+  getBallotDraftImportMessage,
+  getFriendlyBallotDraftParseError,
+  normalizeBallotReviewDraft,
+} from "@/lib/ballot-draft-quality";
 import type {
   BallotInput,
   BallotImportMeta,
@@ -62,7 +67,11 @@ function isSupportedUploadType(mediaType: string): mediaType is
   );
 }
 
-function withIds(draft: BallotReviewDraft, state: string | null): BallotInput {
+function withIds(
+  draft: BallotReviewDraft,
+  state: string | null,
+  source: "pasted_text" | "uploaded_file"
+): BallotInput {
   const election: BallotElectionContext | null =
     draft.election && draft.election.name
       ? {
@@ -104,8 +113,7 @@ function withIds(draft: BallotReviewDraft, state: string | null): BallotInput {
           : "partial"
         : "unavailable",
     confidence: draft.confidence,
-    message:
-      "Parsed from pasted ballot text. Review candidate names, parties, and measures before continuing.",
+    message: getBallotDraftImportMessage(source, draft),
     fallbackLinks: [],
     locality: {
       city: null,
@@ -263,7 +271,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const draft = uploadFile
+    const rawDraft = uploadFile
       ? await parseBallotReviewDraftFile({
           fileName: uploadFile.fileName,
           mediaType: uploadFile.mediaType,
@@ -275,14 +283,36 @@ export async function POST(request: NextRequest) {
           state: body.state ?? null,
         });
 
-    if (!isValidBallotReviewDraft(draft)) {
+    if (!isValidBallotReviewDraft(rawDraft)) {
       return NextResponse.json(
-        { error: "Parsed ballot draft was invalid" },
+        {
+          error: getFriendlyBallotDraftParseError(
+            new Error("Parsed ballot draft was invalid"),
+            uploadFile ? "file" : "text"
+          ),
+        },
         { status: 502 }
       );
     }
 
-    const normalizedBallot = withIds(draft, body.state ?? null);
+    const draft = normalizeBallotReviewDraft(rawDraft);
+    if (draft.races.length === 0 && draft.measures.length === 0) {
+      return NextResponse.json(
+        {
+          error: getFriendlyBallotDraftParseError(
+            new Error("No races or measures were confidently extracted"),
+            uploadFile ? "file" : "text"
+          ),
+        },
+        { status: 422 }
+      );
+    }
+
+    const normalizedBallot = withIds(
+      draft,
+      body.state ?? null,
+      uploadFile ? "uploaded_file" : "pasted_text"
+    );
     const textHash = uploadFile
       ? hashText(Buffer.from(uploadFile.bytes).toString("base64"))
       : hashText(body.ballotText.trim());
@@ -310,10 +340,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to parse ballot draft",
+        error: getFriendlyBallotDraftParseError(
+          error,
+          uploadFile ? "file" : "text"
+        ),
       },
       { status: 502 }
     );

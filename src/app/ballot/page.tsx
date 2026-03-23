@@ -37,6 +37,12 @@ import {
   updateDraftMeasureTitle,
   updateDraftRaceName,
 } from "@/lib/draft-ballot-review";
+import {
+  getAppliedDraftSummary,
+  getBallotDraftQuality,
+  getBallotDraftQualityLabel,
+  getBallotDraftReviewHint,
+} from "@/lib/ballot-draft-quality";
 
 interface CivicApiResponse {
   state: string | null;
@@ -463,6 +469,31 @@ export default function BallotPage() {
     return null; // redirecting
   }
 
+  const draftQuality = draftSummary
+    ? getBallotDraftQuality(draftSummary.confidence)
+    : null;
+  const draftReviewHint =
+    draftSummary && draftPreview
+      ? getBallotDraftReviewHint({
+          confidence: draftSummary.confidence,
+          races: draftSummary.races,
+          measures: draftSummary.measures,
+        })
+      : null;
+  const appliedDraftSummary =
+    importMeta?.source === "official_upload" &&
+    importMeta.status !== "complete" &&
+    importMeta.confidence < 80
+      ? getAppliedDraftSummary({
+          address,
+          state: state ?? "",
+          election,
+          importMeta,
+          races,
+          measures,
+        })
+      : null;
+
   return (
     <main className="flex flex-1 flex-col items-center px-4 py-8 sm:py-16">
       <div className="w-full max-w-lg">
@@ -650,9 +681,9 @@ export default function BallotPage() {
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="font-medium">Review parsed draft</p>
-                            <p className="mt-1 text-muted-foreground">
-                              Fix anything wrong before applying this draft to
-                              your ballot. Parsed {draftPreview.races.length} race
+                        <p className="mt-1 text-muted-foreground">
+                          Fix anything wrong before applying this draft to
+                          your ballot. Parsed {draftPreview.races.length} race
                               {draftPreview.races.length === 1 ? "" : "s"} and{" "}
                               {draftPreview.measures.length} measure
                               {draftPreview.measures.length === 1 ? "" : "s"}.
@@ -671,6 +702,26 @@ export default function BallotPage() {
                             Discard Draft
                           </Button>
                         </div>
+                        {draftSummary && (
+                          <div
+                            className={`rounded-lg border p-3 text-sm ${
+                              draftQuality === "low"
+                                ? "border-amber-500/20 bg-amber-500/10 text-amber-900 dark:text-amber-100"
+                                : draftQuality === "medium"
+                                  ? "border-primary/15 bg-primary/5 text-foreground"
+                                  : "border-emerald-500/20 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
+                            }`}
+                          >
+                            <p className="font-medium">
+                              {getBallotDraftQualityLabel(draftSummary.confidence)}
+                            </p>
+                            {draftReviewHint && (
+                              <p className="mt-1 text-xs">
+                                {draftReviewHint}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         {draftSummary.notes.length > 0 && (
                           <ul className="space-y-1 text-xs text-muted-foreground">
                             {draftSummary.notes.map((note) => (
@@ -934,6 +985,11 @@ export default function BallotPage() {
                     later too. Election offices often publish more complete
                     sample ballots closer to election day.
                   </p>
+                )}
+                {appliedDraftSummary && (
+                  <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+                    {appliedDraftSummary}
+                  </div>
                 )}
               </div>
             )}

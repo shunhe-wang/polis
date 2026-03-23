@@ -266,6 +266,8 @@ Rules:
 - If the election date is unclear, use null.
 - Keep notes short and concrete.
 - Keep measure descriptions concise.
+- If the pasted text appears to come from multiple pages or sections, combine them into one draft without duplicating repeated headers.
+- If a race continues onto another page, keep the race and include the candidates you can confidently extract.
 
 ## Pasted Ballot Text
 ${input.ballotText}`;
@@ -323,7 +325,10 @@ Rules:
 - If the election date is unclear, use null.
 - Keep notes short and concrete.
 - Keep measure descriptions concise.
-- Preserve the ballot's jurisdiction-specific race names.`;
+- Preserve the ballot's jurisdiction-specific race names.
+- Inspect the entire uploaded file, including all pages of a PDF.
+- If multiple pages repeat election headers or instructions, do not duplicate them as races or measures.
+- If the file contains only part of the ballot, return the partial draft and mention that in notes.`;
 }
 
 function buildCandidateDossierPrompt(
@@ -561,7 +566,7 @@ export function parseBallotReviewDraft(input: {
 }): Promise<BallotReviewDraft> {
   return runJsonCompletion<BallotReviewDraft>({
     model: "claude-haiku-4-5-20251001",
-    maxTokens: 1800,
+    maxTokens: 2400,
     prompt: buildBallotTextParsePrompt(input),
     parseError: "Could not parse ballot review draft",
   });
@@ -594,7 +599,7 @@ export function parseBallotReviewDraftFile(input: {
 
   return runJsonCompletionWithContent<BallotReviewDraft>({
     model: "claude-haiku-4-5-20251001",
-    maxTokens: 2200,
+    maxTokens: 3200,
     prompt: buildBallotFileParsePrompt({
       state: input.state,
       fileName: input.fileName,
