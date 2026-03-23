@@ -31,15 +31,17 @@ export default function StartPage() {
       <div className="mx-auto w-full max-w-4xl space-y-8">
         <div className="text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-800 dark:text-cyan-200">
-            Choose How To Start
+            {intentGuide ? "Choose How To Continue" : "Choose How To Start"}
           </p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
-            Start with an account, or browse first.
+            {intentGuide
+              ? "Create an account to open the guide."
+              : "Start with an account, or browse first."}
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            If you sign in now, your values profile and ballot will be saved as
-            you go. If you continue as a guest, you can still build your ballot
-            before deciding to create an account.
+            {intentGuide
+              ? "Guest mode stops at ballot building. Sign in or create a free account to open the guide, keep your ballot saved, and unlock research features."
+              : "If you sign in now, your values profile and ballot will be saved as you go. If you continue as a guest, you can still build your ballot before deciding to create an account."}
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground">
             Free accounts unlock candidate links and one starter analysis. Full
@@ -85,10 +87,12 @@ export default function StartPage() {
           <Card className="border-black/5 bg-white/72 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
             <CardContent className="flex h-full flex-col pt-6">
               <UserRound className="size-6 text-cyan-700 dark:text-cyan-300" />
-              <h2 className="mt-4 text-lg font-semibold">Continue as Guest</h2>
+              <h2 className="mt-4 text-lg font-semibold">
+                {intentGuide ? "Back to Ballot" : "Continue as Guest"}
+              </h2>
               <p className="mt-2 flex-1 text-sm text-muted-foreground">
                 {intentGuide
-                  ? "You can return to your ballot, but guest mode will stop there until you create an account."
+                  ? "You can keep editing your ballot as a guest, but you will need an account before you can open the guide."
                   : "Start the questionnaire and build your ballot first. You can create an account later if you want to save progress and unlock more research."}
               </p>
               <Link

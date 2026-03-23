@@ -527,6 +527,30 @@ export default function BallotPage() {
                   : account.trustReason ?? "Verify your email to unlock AI features."
                 : "Continue to the guide when you are ready to run the full personalized analysis."}
             </p>
+            {(account.electionPassCredits > 0 ||
+              account.powerPassRunsRemaining > 0 ||
+              account.starterAnalysesRemaining > 0) && (
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                {account.starterAnalysesRemaining > 0 && (
+                  <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                    {account.starterAnalysesRemaining} starter analysis
+                    {account.starterAnalysesRemaining === 1 ? "" : "es"}
+                  </span>
+                )}
+                {account.electionPassCredits > 0 && (
+                  <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                    {account.electionPassCredits} election pass credit
+                    {account.electionPassCredits === 1 ? "" : "s"}
+                  </span>
+                )}
+                {account.powerPassRunsRemaining > 0 && (
+                  <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                    {account.powerPassRunsRemaining} power pass run
+                    {account.powerPassRunsRemaining === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1074,7 +1098,7 @@ export default function BallotPage() {
             {returnToGuide
               ? "Update Guide"
               : account.tier === "guest"
-              ? "Continue to Account Options"
+              ? "Create Account to Open Guide"
               : account.tier === "free"
                 ? account.trustedAccount
                   ? "Browse Candidates & Use Free Analysis"

@@ -389,4 +389,40 @@ test("pricing page shows checkout return state", async ({ page }) => {
     page.getByText("Checkout completed. Stripe will add the pass to your account as soon as the webhook lands.")
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Buy Election Pass" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign Out" })).toBeVisible();
+});
+
+test("start page makes guest guide stop explicit", async ({ page }) => {
+  await page.goto("/start?intent=guide");
+
+  await expect(
+    page.getByRole("heading", { name: "Create an account to open the guide." })
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to Ballot" })).toBeVisible();
+  await expect(
+    page.getByText("Guest mode stops at ballot building.")
+  ).toBeVisible();
+});
+
+test("home page lets returning users jump back into their guide", async ({ page }) => {
+  await page.addInitScript(
+    ({ profile, ballot }) => {
+      window.sessionStorage.setItem("valuesProfile", JSON.stringify(profile));
+      window.sessionStorage.setItem("ballotInput", JSON.stringify(ballot));
+    },
+    { profile: valuesProfile, ballot: ballotInput }
+  );
+  await page.route("**/api/account", async (route) => {
+    await route.fulfill({ json: accountSummary("pro") });
+  });
+  await page.route("**/api/guide", async (route) => {
+    await route.fulfill({
+      json: [{ id: "guide-123", created_at: "2026-03-22T00:00:00.000Z", ballot_input: ballotInput, is_public: false }],
+    });
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("link", { name: "Open Saved Guide" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Buy Passes" }).first()).toBeVisible();
 });
