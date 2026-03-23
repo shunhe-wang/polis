@@ -240,6 +240,12 @@ async function seedGuideSession(page: Page) {
   );
 }
 
+async function seedValuesProfileOnly(page: Page) {
+  await page.addInitScript(({ profile }) => {
+    window.sessionStorage.setItem("valuesProfile", JSON.stringify(profile));
+  }, { profile: valuesProfile });
+}
+
 test("guest users are stopped at the guide gate", async ({ page }) => {
   await seedGuideSession(page);
   await page.route("**/api/account", async (route) => {
@@ -267,7 +273,9 @@ test("guest users are stopped at the guide gate", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Create Free Account" })
   ).toBeVisible();
-  await expect(page.getByText("Guest", { exact: true })).toBeVisible();
+  await expect(
+    page.locator('span[data-slot="badge"]').filter({ hasText: "Guest" }).first()
+  ).toBeVisible();
 });
 
 test("free users can unlock one starter analysis", async ({ page }) => {
@@ -369,7 +377,9 @@ test("pro users see full-ballot guide results", async ({ page }) => {
 
   await page.goto("/guide");
 
-  await expect(page.getByText("Power Pass", { exact: true })).toBeVisible();
+  await expect(
+    page.locator('span[data-slot="badge"]').filter({ hasText: "Power Pass" }).first()
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Save & Share Guide" })).toBeVisible();
   await expect(page.getByText("Amendment 1")).toBeVisible();
   await expect(page.getByRole("button", { name: "Collapse" }).first()).toBeVisible();
@@ -425,4 +435,155 @@ test("home page lets returning users jump back into their guide", async ({ page 
 
   await expect(page.getByRole("link", { name: "Open Saved Guide" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Buy Passes" }).first()).toBeVisible();
+});
+
+test("ballot page shows recovery guidance when lookup is unavailable", async ({ page }) => {
+  await seedValuesProfileOnly(page);
+  await page.route("**/api/account", async (route) => {
+    await route.fulfill({ json: accountSummary("guest") });
+  });
+  await page.route("**/api/ballot/lookup?*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        state: "VA",
+        election: null,
+        availableElections: [],
+        requiresElectionSelection: false,
+        primaryParties: [],
+        races: [],
+        measures: [],
+        importMeta: {
+          importId: null,
+          source: "google_civic",
+          status: "unavailable",
+          confidence: 20,
+          message:
+            "Google Civic did not return a ballot for this address yet. Check an official election source, add races manually, or come back later as election data becomes available.",
+          fallbackLinks: [
+            {
+              label: "Virginia voting page (Vote.gov)",
+              url: "https://vote.gov/register/virginia/",
+              kind: "official",
+            },
+            {
+              label: "Official sample ballot",
+              url: "https://example.com/official-ballot",
+              kind: "official",
+            },
+          ],
+          locality: {
+            city: "Alexandria",
+            county: null,
+            state: "VA",
+            zip: "22314",
+          },
+        },
+        error: null,
+      },
+    });
+  });
+
+  await page.goto("/ballot");
+  await page.getByLabel("Street Address").fill("123 Main St");
+  await page.getByLabel("City").fill("Alexandria");
+  await page.getByLabel("State").fill("VA");
+  await page.getByLabel("ZIP Code").fill("22314");
+  await page.getByRole("button", { name: "Find My Ballot" }).click();
+
+  await expect(page.getByText("Ballot import unavailable")).toBeVisible();
+  await expect(page.getByText("Best next steps")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Virginia voting page (Vote.gov)" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Official sample ballot" })).toBeVisible();
+});
+
+test("authenticated users can review and apply a parsed ballot draft", async ({ page }) => {
+  await seedValuesProfileOnly(page);
+  await page.route("**/api/account", async (route) => {
+    await route.fulfill({ json: accountSummary("free") });
+  });
+  await page.route("**/api/ballot/review-draft", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: { draft: null, normalizedBallot: null },
+      });
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        draft: {
+          election: {
+            name: "Virginia General Election",
+            electionDay: "2026-11-03",
+            kind: "general",
+            selectedParty: null,
+          },
+          races: [
+            {
+              name: "Mayor",
+              level: "local",
+              contestType: "General",
+              candidates: [
+                { name: "Jane Doe", party: "Democrat" },
+                { name: "John Roe", party: "Independent" },
+              ],
+            },
+          ],
+          measures: [],
+          confidence: 82,
+          notes: ["Review candidate names before applying."],
+        },
+        normalizedBallot: {
+          address: "",
+          state: "VA",
+          election: {
+            id: "draft-election",
+            name: "Virginia General Election",
+            electionDay: "2026-11-03",
+            kind: "general",
+            selectedParty: null,
+          },
+          importMeta: {
+            importId: null,
+            source: "official_upload",
+            status: "partial",
+            confidence: 82,
+            message: "Parsed from pasted ballot text. Review candidate names, parties, and measures before continuing.",
+            fallbackLinks: [],
+            locality: null,
+          },
+          races: [
+            {
+              id: "draft-race-1",
+              name: "Mayor",
+              level: "local",
+              contestType: "General",
+              candidates: [
+                { id: "draft-cand-1", name: "Jane Doe", party: "Democrat" },
+                { id: "draft-cand-2", name: "John Roe", party: "Independent" },
+              ],
+            },
+          ],
+          measures: [],
+        },
+      },
+    });
+  });
+
+  await page.goto("/ballot");
+  await page.getByPlaceholder("Paste the official ballot text here. Include the election title, each race, candidate names, and any ballot measures.").fill(
+    "Virginia General Election\nMayor\nJane Doe\nJohn Roe\n"
+  );
+  await page.getByRole("button", { name: "Parse Ballot Text" }).click();
+
+  await expect(page.getByText("Review parsed draft")).toBeVisible();
+  await page.locator('input[value="Mayor"]').fill("Mayor of Alexandria");
+  await page.getByRole("button", { name: "Apply Draft to Ballot" }).last().click();
+
+  await expect(page.getByText("1 race on your ballot")).toBeVisible();
+  await expect(page.getByText("Mayor of Alexandria")).toBeVisible();
+  await expect(
+    page.locator("li").filter({ hasText: "Jane Doe" }).filter({ hasText: "(D)" }).first()
+  ).toBeVisible();
 });
