@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import type { UserTier } from "@/lib/freemium";
 import type { Race, Candidate } from "@/lib/types";
 import { formatPartyInline } from "@/lib/party-format";
 
@@ -17,7 +16,6 @@ interface RaceEditorProps {
   locality?: string | null;
   address?: string | null;
   electionId?: string | null;
-  userTier: UserTier;
   canLookupCandidates: boolean;
 }
 
@@ -134,7 +132,6 @@ export function RaceEditor({
   locality,
   address,
   electionId,
-  userTier,
   canLookupCandidates,
 }: RaceEditorProps) {
   const [showAddRace, setShowAddRace] = useState(false);
@@ -159,9 +156,7 @@ export function RaceEditor({
 
     if (!canLookupCandidates) {
       setLookupMessage(
-        userTier === "pro"
-          ? "Candidate lookup is unavailable until your account is verified."
-          : "Automatic candidate lookup is a paid feature. Free users and guests can still add candidates manually."
+        "Sign in with a trusted account to use automatic candidate lookup. You can still add candidates manually."
       );
       return;
     }
@@ -401,7 +396,6 @@ export function RaceEditor({
           }
           canLookUpCandidates={canLookupCandidates}
           lookupRequirement={getRaceLookupRequirement(race.name, state, locality)}
-          userTier={userTier}
         />
       ))}
 
@@ -423,7 +417,6 @@ interface RaceCardProps {
   onLookUpCandidates: () => void;
   canLookUpCandidates: boolean;
   lookupRequirement: string | null;
-  userTier: UserTier;
 }
 
 function RaceCard({
@@ -435,7 +428,6 @@ function RaceCard({
   onLookUpCandidates,
   canLookUpCandidates,
   lookupRequirement,
-  userTier,
 }: RaceCardProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [candidateName, setCandidateName] = useState("");
@@ -573,9 +565,7 @@ function RaceCard({
         {(lookupRequirement || !canLookUpCandidates) && (
           <p className="mt-2 text-xs text-muted-foreground">
             {lookupRequirement ??
-              (userTier === "pro"
-                ? "Verify your account before using automatic candidate lookup."
-                : "Automatic candidate lookup is a paid feature. Add candidates manually on free or guest access.")}
+              "Sign in with a trusted account before using automatic candidate lookup."}
           </p>
         )}
       </CardContent>

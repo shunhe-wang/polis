@@ -6,8 +6,6 @@ import {
   getCandidateLookupQuotaRules,
 } from "@/lib/ai-quotas";
 import { getAccountTrustStatus } from "@/lib/account-trust";
-import { getAccountPlan, getCurrentEntitlements } from "@/lib/billing";
-import { canAccessFeature } from "@/lib/freemium";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import { lookupGoogleCivicBallot } from "@/lib/ballot-sources/google-civic";
 import {
@@ -59,19 +57,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!trust.trusted) {
     return NextResponse.json(
       { error: trust.reason, candidates: [] },
-      { status: 403 }
-    );
-  }
-
-  const entitlements = await getCurrentEntitlements(supabase, user.id);
-  const tier = getAccountPlan(user, entitlements).tier;
-  if (!canAccessFeature(tier, "research")) {
-    return NextResponse.json(
-      {
-        error:
-          "Automatic candidate lookup is a paid feature. Free users can still add candidates manually.",
-        candidates: [],
-      },
       { status: 403 }
     );
   }

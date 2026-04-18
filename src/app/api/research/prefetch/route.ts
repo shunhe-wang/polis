@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAccountTrustStatus } from "@/lib/account-trust";
-import { getAccountPlan, getCurrentEntitlements } from "@/lib/billing";
 import type { BallotInput, CandidateDossier, MeasureDossier } from "@/lib/types";
 import {
   runCandidateDossierResearch,
@@ -57,12 +56,12 @@ async function runWithConcurrencyLimit(
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 }
 
-function getPrefetchCandidateLimit(tier: "free" | "pro"): number {
-  return tier === "pro" ? 8 : 2;
+function getPrefetchCandidateLimit(): number {
+  return 2;
 }
 
-function getPrefetchMeasureLimit(tier: "free" | "pro"): number {
-  return tier === "pro" ? 3 : 0;
+function getPrefetchMeasureLimit(): number {
+  return 0;
 }
 
 export async function POST(request: NextRequest) {
@@ -108,12 +107,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const entitlements = await getCurrentEntitlements(supabase, user.id);
-  const plan = getAccountPlan(user, entitlements);
-  if (plan.tier === "guest") {
-    return NextResponse.json({ warmedCandidates: 0, warmedMeasures: 0 });
-  }
-
   const ballotInput = body.ballotInput;
   const state = ballotInput.state.trim();
   if (!state) {
@@ -129,11 +122,11 @@ export async function POST(request: NextRequest) {
         state,
       }))
     )
-    .slice(0, getPrefetchCandidateLimit(plan.tier));
+    .slice(0, getPrefetchCandidateLimit());
 
   const measureItems = ballotInput.measures
     .map((measure) => ({ measure, state }))
-    .slice(0, getPrefetchMeasureLimit(plan.tier));
+    .slice(0, getPrefetchMeasureLimit());
 
   const tasks: Array<() => Promise<void>> = [];
 

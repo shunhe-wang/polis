@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import { AppHeader } from "@/components/layout/app-header";
+import { AppFooter } from "@/components/layout/app-footer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,7 +45,11 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#ffffff" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
-        <script
+      </head>
+      <body className="min-h-full">
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
@@ -58,13 +64,12 @@ export default function RootLayout({
             `,
           }}
         />
-      </head>
-      <body className="min-h-full">
         <div className="app-shell min-h-screen">
           <AppHeader />
           <div className="relative flex min-h-[calc(100vh-4.5rem)] flex-col">
             {children}
           </div>
+          <AppFooter />
         </div>
       </body>
     </html>

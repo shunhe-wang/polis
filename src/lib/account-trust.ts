@@ -83,7 +83,7 @@ export function getAccountTrustStatus(
       emailVerified,
       isDisposableDomain,
       reason:
-        "Use a real email address to unlock free analyses, paid passes, or AI research.",
+        "Use a real email address to unlock starter analysis, credit purchases, or AI research.",
     };
   }
 
@@ -95,7 +95,7 @@ export function getAccountTrustStatus(
       emailVerified,
       isDisposableDomain,
       reason:
-        "Verify your email before using starter analysis, paid unlocks, or full research.",
+        "Verify your email before using starter analysis, credit purchases, or full research.",
     };
   }
 

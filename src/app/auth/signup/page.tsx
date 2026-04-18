@@ -36,7 +36,7 @@ export default function SignupPage() {
 
     if (isDisposableEmailDomain(email)) {
       setError(
-        "Use a real email address. Temporary inboxes are blocked for free analyses and paid unlocks."
+        "Use a real email address. Temporary inboxes are blocked for starter analysis and credit purchases."
       );
       setIsLoading(false);
       return;
@@ -76,8 +76,8 @@ export default function SignupPage() {
           </p>
           {shouldRequireVerifiedEmail() && (
             <p className="mt-3 text-sm text-muted-foreground">
-              Verified email is required before free analyses, paid unlocks, or
-              full guide research will run.
+              Verified email is required before starter analysis, credit
+              purchases, or full guide research will run.
             </p>
           )}
           <Link
@@ -97,12 +97,12 @@ export default function SignupPage() {
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold tracking-tight">Create Account</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign up to save your values profile, keep your ballot, and unlock 1
-            free starter candidate analysis.
+            Sign up to save your values profile, keep your ballot, and buy
+            Election Pass credits when you need them.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             Use a real email you can verify. Temporary inboxes are blocked for
-            AI features and paid unlocks.
+            AI features and credit purchases.
           </p>
         </div>
 

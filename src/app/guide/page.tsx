@@ -33,10 +33,8 @@ import Link from "next/link";
 interface GuideAccessState {
   unlocked: boolean;
   canUnlock: boolean;
-  source: "existing" | "election_pass" | "power_pass" | null;
+  source: "existing" | "election_pass" | null;
   electionPassCredits: number;
-  powerPassRunsRemaining: number;
-  powerPassExpiresAt: string | null;
   requiresAuth?: boolean;
 }
 
@@ -49,12 +47,13 @@ export default function GuidePage() {
   const [hasStarted, setHasStarted] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountSummary>(
     DEFAULT_ACCOUNT_SUMMARY
   );
-  const [tierLoaded, setTierLoaded] = useState(false);
+  const [accountLoaded, setAccountLoaded] = useState(false);
   const [starterResult, setStarterResult] =
     useState<CandidateResult | null>(null);
   const [starterError, setStarterError] = useState<string | null>(null);
@@ -78,7 +77,7 @@ export default function GuidePage() {
     stopResearch,
   } = useStreamingResearch();
 
-  // Load data from sessionStorage (with Supabase fallback) and check tier
+  // Load data from sessionStorage (with Supabase fallback) and check account state.
   useEffect(() => {
     async function load() {
       // Try to sync from Supabase if sessionStorage is empty
@@ -100,7 +99,7 @@ export default function GuidePage() {
 
       const summary = await getAccountSummary();
       setAccount(summary);
-      setTierLoaded(true);
+      setAccountLoaded(true);
 
       if (summary.isAuthenticated) {
         try {
@@ -118,7 +117,7 @@ export default function GuidePage() {
         }
       }
 
-      if (summary.tier === "free" || summary.tier === "pro") {
+      if (summary.isAuthenticated) {
         try {
           const starterResponse = await fetch("/api/starter-analysis", {
             cache: "no-store",
@@ -156,7 +155,7 @@ export default function GuidePage() {
       valuesProfile &&
       ballotInput &&
       !hasStarted &&
-      tierLoaded &&
+      accountLoaded &&
       !!guideAccess?.unlocked
     ) {
       setHasStarted(true);
@@ -167,7 +166,7 @@ export default function GuidePage() {
     ballotInput,
     hasStarted,
     startResearch,
-    tierLoaded,
+    accountLoaded,
     guideAccess?.unlocked,
   ]);
 
@@ -303,7 +302,7 @@ export default function GuidePage() {
 
   useEffect(() => {
     if (
-      !tierLoaded ||
+      !accountLoaded ||
       !ballotInput ||
       !account.isAuthenticated ||
       !account.trustedAccount ||
@@ -345,7 +344,7 @@ export default function GuidePage() {
 
     return () => window.clearTimeout(timeout);
   }, [
-    tierLoaded,
+    accountLoaded,
     ballotInput,
     account.isAuthenticated,
     account.trustedAccount,
@@ -432,16 +431,14 @@ export default function GuidePage() {
 
     setSaveError(null);
     const confirmed = window.confirm(
-      guideAccess?.powerPassRunsRemaining &&
-        guideAccess.powerPassRunsRemaining > 0
-        ? "Unlock this ballot and use 1 Power Pass run?"
-        : "Unlock this ballot and consume 1 Election Pass credit?"
+      "Unlock this ballot and consume 1 Election Pass credit?"
     );
     if (!confirmed) {
       return;
     }
 
     try {
+      setIsUnlocking(true);
       const response = await fetch("/api/guide-access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -466,31 +463,19 @@ export default function GuidePage() {
         setGuideAccess(data as GuideAccessState);
         setAccount((current) => ({
           ...current,
-          tier: "pro",
-          planKey:
-            (data.source === "power_pass" ? "power_14d" : "election_pass"),
-          planLabel:
-            data.source === "power_pass" ? "Power Pass" : "Election Pass",
           electionPassCredits:
             typeof data.electionPassCredits === "number"
               ? data.electionPassCredits
               : current.electionPassCredits,
-          powerPassRunsRemaining:
-            typeof data.powerPassRunsRemaining === "number"
-              ? data.powerPassRunsRemaining
-              : current.powerPassRunsRemaining,
-          powerPassExpiresAt:
-            typeof data.powerPassExpiresAt === "string" ||
-            data.powerPassExpiresAt === null
-              ? data.powerPassExpiresAt
-              : current.powerPassExpiresAt,
         }));
         setHasStarted(false);
       }
     } catch {
       setSaveError("Could not unlock this ballot.");
+    } finally {
+      setIsUnlocking(false);
     }
-  }, [account.trustedAccount, ballotInput, guideAccess?.powerPassRunsRemaining]);
+  }, [account.trustedAccount, ballotInput]);
 
   if (!valuesProfile || !ballotInput) {
     return null;
@@ -505,34 +490,33 @@ export default function GuidePage() {
             Your Voter Guide
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {!tierLoaded
+            {!accountLoaded
               ? "Preparing your guide..."
-              : !account.trustedAccount && account.tier !== "guest"
+              : !account.trustedAccount && account.isAuthenticated
                 ? account.trustReason ??
-                  "Verify your email before starter analysis, passes, or full guide research will run."
+                  "Verify your email before starter analysis, credit purchases, or full guide research will run."
               : guideAccess?.unlocked && isResearching
               ? "Sit tight — we're doing deep research on each item to give you comprehensive, cited results. This may take a few minutes."
               : guideAccess?.unlocked &&
                   (results.length > 0 || measureResults.length > 0)
                 ? "Here are your personalized recommendations."
                 : guideAccess?.canUnlock
-                  ? "This ballot is ready for a paid unlock. Use a pass to run the full guide, or keep browsing links below."
-                : account.tier === "free"
+                  ? "This ballot is ready for a credit-based unlock. Use 1 credit to run the full guide, or keep browsing links below."
+                : account.isAuthenticated
                   ? account.starterAnalysesRemaining > 0
-                    ? "Browse your ballot, open source links, and use your free starter analysis on one candidate."
-                    : "Browse your ballot and open source links. Your free starter analysis has already been used."
-                  : account.tier === "guest"
-                    ? "Browse your ballot now, then create a free account to unlock one starter candidate analysis."
+                    ? "Browse your ballot, open source links, and use your starter analysis on one candidate."
+                    : "Browse your ballot and open source links. Your starter analysis has already been used."
+                  : !account.isAuthenticated
+                    ? "Browse your ballot now, then create an account to unlock credits and open the full guide."
                   : hasStarted
                     ? "Research complete."
                     : "Preparing your guide..."}
           </p>
-          {tierLoaded && (
+          {accountLoaded && account.isAuthenticated && (
             <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              {account.planLabel}
-              {account.tier === "free"
-                ? ` • ${account.starterAnalysesRemaining} starter analysis left`
-                : ""}
+              {account.electionPassCredits} credit
+              {account.electionPassCredits === 1 ? "" : "s"} on account
+              {` • ${account.starterAnalysesRemaining} starter analysis left`}
             </p>
           )}
           {ballotInput.election && (
@@ -544,7 +528,7 @@ export default function GuidePage() {
                 : ""}
             </p>
           )}
-          {tierLoaded && (
+          {accountLoaded && (
             <div className="mx-auto mt-5 max-w-3xl rounded-[1.5rem] border border-black/5 bg-white/72 p-4 text-left shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] backdrop-blur-sm dark:border-white/10 dark:bg-white/4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
@@ -554,23 +538,23 @@ export default function GuidePage() {
                   <p className="text-base font-semibold text-foreground">
                     {guideAccess?.unlocked
                       ? "Full guide unlocked for this ballot"
-                      : account.tier === "guest"
+                      : !account.isAuthenticated
                         ? "Guest mode: ballot only"
-                        : account.tier === "free"
-                          ? "Free mode: links plus 1 starter analysis"
-                          : "Paid pass available but not spent on this ballot yet"}
+                        : guideAccess?.canUnlock
+                          ? "Credit available but not spent on this ballot yet"
+                          : "Signed-in account: browse now, unlock later"}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {guideAccess?.unlocked
                       ? "This ballot can run full personalized research, measures, and save/share."
                       : guideAccess?.canUnlock
-                        ? "You already have paid unlocks available. Spend one only when this ballot is final."
+                        ? "You already have account credits available. Spend one only when this ballot is final."
                         : account.trustReason ??
-                          "Browse links first. Upgrade or spend a pass only when you want the full synthesis."}
+                          "Browse links first, then buy or spend a credit when you want the full synthesis."}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  {account.tier === "free" && (
+                  {account.isAuthenticated && (
                     <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
                       {account.starterAnalysesRemaining} starter analysis left
                     </span>
@@ -581,17 +565,11 @@ export default function GuidePage() {
                       {account.electionPassCredits === 1 ? "" : "s"}
                     </span>
                   )}
-                  {account.powerPassRunsRemaining > 0 && (
-                    <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
-                      {account.powerPassRunsRemaining} power pass run
-                      {account.powerPassRunsRemaining === 1 ? "" : "s"}
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
           )}
-          {tierLoaded && (
+          {accountLoaded && (
             <div className="mt-4 flex flex-wrap justify-center gap-3">
               <Button variant="outline" onClick={goToBallotEditor}>
                 Edit Ballot
@@ -600,16 +578,15 @@ export default function GuidePage() {
                 <Button
                   className="bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white shadow-[0_20px_40px_-20px_rgba(8,47,73,0.75)] hover:opacity-95 dark:text-white"
                   onClick={handleUnlockGuide}
+                  disabled={isUnlocking}
                 >
-                  {guideAccess.powerPassRunsRemaining > 0
-                    ? "Unlock with Power Pass"
-                    : "Unlock with Election Pass"}
+                  {isUnlocking ? "Unlocking..." : "Unlock with 1 Credit"}
                 </Button>
               )}
-              {!guideAccess?.unlocked && !guideAccess?.canUnlock && account.tier !== "guest" && account.trustedAccount && (
+              {!guideAccess?.unlocked && !guideAccess?.canUnlock && account.isAuthenticated && account.trustedAccount && (
                 <Link href="/pricing">
                   <Button className="bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white shadow-[0_20px_40px_-20px_rgba(8,47,73,0.75)] hover:opacity-95 dark:text-white">
-                    See Passes
+                    Buy Credit
                   </Button>
                 </Link>
               )}
@@ -637,18 +614,21 @@ export default function GuidePage() {
               {storageError}
             </p>
           )}
+          {!guideAccess?.unlocked && saveError && (
+            <p className="mt-3 text-sm text-destructive">{saveError}</p>
+          )}
         </div>
 
-        {tierLoaded && account.tier === "guest" && (
+        {accountLoaded && !account.isAuthenticated && (
           <div className="rounded-[1.5rem] border border-primary/20 bg-primary/5 p-6 text-center">
             <h2 className="text-lg font-semibold">Create an account to unlock the guide</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Guest mode stops at ballot building. Sign in to pick up where you
-              left off, or create a free account for candidate links and one
-              starter analysis.
+              left off, or create an account to use starter analysis and buy
+              credits when you need a full unlock.
             </p>
             <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
-              <Button onClick={() => goToAuth("/auth/signup")}>Create Free Account</Button>
+              <Button onClick={() => goToAuth("/auth/signup")}>Create Account</Button>
               <Button variant="outline" onClick={() => goToAuth("/auth/login")}>
                 Sign In
               </Button>
@@ -659,12 +639,12 @@ export default function GuidePage() {
           </div>
         )}
 
-        {tierLoaded && !account.trustedAccount && account.tier !== "guest" && (
+        {accountLoaded && !account.trustedAccount && account.isAuthenticated && (
           <div className="mb-6 rounded-[1.5rem] border border-amber-500/20 bg-amber-500/10 p-5 text-sm text-amber-900 dark:text-amber-100">
-            <p className="font-medium">Verify this account before using AI or paid unlocks</p>
+            <p className="font-medium">Verify this account before using AI or credits</p>
             <p className="mt-1">
               {account.trustReason ??
-                "Starter analysis, passes, and full guide research require a verified non-disposable email."}
+                "Starter analysis, credit purchases, and full guide research require a verified non-disposable email."}
             </p>
           </div>
         )}
@@ -687,20 +667,18 @@ export default function GuidePage() {
           </div>
         )}
 
-        {/* Free tier candidate browser */}
-        {tierLoaded && account.tier !== "guest" && !guideAccess?.unlocked && (
+        {/* Signed-in candidate browser */}
+        {accountLoaded && account.isAuthenticated && !guideAccess?.unlocked && (
           <FreeGuideBrowser
             ballotInput={ballotInput}
-            userTier={account.tier}
             trustedAccount={account.trustedAccount}
             trustReason={account.trustReason}
             starterAnalysesRemaining={account.starterAnalysesRemaining}
+            electionPassCredits={account.electionPassCredits}
             starterResult={starterResult}
             starterError={starterError}
             analyzingCandidateId={analyzingCandidateId}
             onAnalyzeCandidate={handleStarterAnalysis}
-            onSignUp={() => goToAuth("/auth/signup")}
-            onSignIn={() => goToAuth("/auth/login")}
             onEditBallot={goToBallotEditor}
           />
         )}

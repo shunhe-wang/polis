@@ -53,7 +53,7 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold tracking-tight">Sign In</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Sign in to keep your ballot, reuse your profile, and access your
-            starter candidate analysis.
+            account credits.
           </p>
         </div>
 

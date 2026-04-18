@@ -146,3 +146,71 @@
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.22), transparent 55%);
   opacity: 0.28;
 }
+
+.legal-markdown {
+  line-height: 1.7;
+}
+
+.legal-markdown h1,
+.legal-markdown h2,
+.legal-markdown h3,
+.legal-markdown h4 {
+  color: var(--foreground);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.legal-markdown h1 {
+  font-size: 2rem;
+  line-height: 1.15;
+  margin-bottom: 1rem;
+}
+
+.legal-markdown h2 {
+  font-size: 1.35rem;
+  line-height: 1.2;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.legal-markdown h3 {
+  font-size: 1.1rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.legal-markdown p,
+.legal-markdown ul,
+.legal-markdown ol,
+.legal-markdown blockquote {
+  margin-bottom: 0.9rem;
+  color: var(--muted-foreground);
+}
+
+.legal-markdown strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.legal-markdown ul,
+.legal-markdown ol {
+  padding-left: 1.5rem;
+}
+
+.legal-markdown ul {
+  list-style: disc;
+}
+
+.legal-markdown ol {
+  list-style: decimal;
+}
+
+.legal-markdown li + li {
+  margin-top: 0.3rem;
+}
+
+.legal-markdown a {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}

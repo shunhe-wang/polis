@@ -26,12 +26,12 @@ export function ProGate({ feature }: ProGateProps) {
       <CardContent className="pt-6 text-center">
         <h3 className="text-lg font-semibold">Unlock {feature}</h3>
         <p className="mt-2 text-sm text-muted-foreground">
-          Create a free account to access personalized candidate research,
-          alignment scoring, and shareable voter guides.
+          Create an account to save progress, buy credits, and unlock
+          personalized research when you are ready.
         </p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Button onClick={() => goToAuth("/auth/signup")}>
-            Sign Up Free
+            Create Account
           </Button>
           <Button
             variant="outline"

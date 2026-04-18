@@ -34,6 +34,7 @@ export default function HomePage() {
     );
   });
   const [latestGuideId, setLatestGuideId] = useState<string | null>(null);
+  const [savedGuideCount, setSavedGuideCount] = useState(0);
 
   useEffect(() => {
     void getAccountSummary().then(async (summary) => {
@@ -47,8 +48,11 @@ export default function HomePage() {
         const response = await fetch("/api/guide", { cache: "no-store" });
         if (!response.ok) return;
         const data = await response.json();
-        if (Array.isArray(data) && data[0] && typeof data[0].id === "string") {
-          setLatestGuideId(data[0].id);
+        if (Array.isArray(data)) {
+          setSavedGuideCount(data.length);
+          if (data[0] && typeof data[0].id === "string") {
+            setLatestGuideId(data[0].id);
+          }
         }
       } catch {
         // Ignore saved-guide preload failures on the landing page.
@@ -106,7 +110,9 @@ export default function HomePage() {
             <div className="flex flex-wrap gap-2">
               {latestGuideId && (
                 <Badge variant="outline" className="rounded-full px-3 py-1">
-                  Saved guide ready
+                  {savedGuideCount > 1
+                    ? `${savedGuideCount} saved guides`
+                    : "Saved guide ready"}
                 </Badge>
               )}
               {hasBallotDraft && (
@@ -116,14 +122,8 @@ export default function HomePage() {
               )}
               {account.electionPassCredits > 0 && (
                 <Badge variant="outline" className="rounded-full px-3 py-1">
-                  {account.electionPassCredits} pass
-                  {account.electionPassCredits === 1 ? "" : "es"} left
-                </Badge>
-              )}
-              {account.powerPassRunsRemaining > 0 && (
-                <Badge variant="outline" className="rounded-full px-3 py-1">
-                  {account.powerPassRunsRemaining} power run
-                  {account.powerPassRunsRemaining === 1 ? "" : "s"} left
+                  {account.electionPassCredits} credit
+                  {account.electionPassCredits === 1 ? "" : "s"} ready
                 </Badge>
               )}
             </div>
@@ -148,7 +148,7 @@ export default function HomePage() {
                 className: "rounded-full px-5",
               })}
             >
-              {account.isAuthenticated ? "Buy Passes" : "Sign In"}
+              {account.isAuthenticated ? "Buy Credits" : "Sign In"}
             </Link>
           </div>
           <div className="grid gap-3 pt-2 sm:grid-cols-3">
@@ -202,9 +202,20 @@ export default function HomePage() {
                       className:
                         "rounded-full bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white hover:opacity-95 dark:text-white",
                     })}
-                  >
-                    {primaryCta.label}
-                  </Link>
+                    >
+                      {primaryCta.label}
+                    </Link>
+                  {savedGuideCount > 1 && (
+                    <Link
+                      href="/guides"
+                      className={buttonVariants({
+                        variant: "outline",
+                        className: "rounded-full",
+                      })}
+                    >
+                      View All Guides
+                    </Link>
+                  )}
                   {hasBallotDraft && (
                     <Link
                       href="/ballot"

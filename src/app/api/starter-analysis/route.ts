@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getAccountPlan, getCurrentEntitlements } from "@/lib/billing";
 import {
   enforceStarterAnalysisQuota,
   getStarterAnalysisLimit,
@@ -12,7 +11,6 @@ import {
   personalizeCandidateDossier,
   runCandidateDossierResearch,
 } from "@/lib/anthropic";
-import { canAccessFeature } from "@/lib/freemium";
 import { sanitizeCandidateResult } from "@/lib/research-text";
 import { buildStarterAnalysisHashes } from "@/lib/research-cache";
 import {
@@ -113,15 +111,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const entitlements = await getCurrentEntitlements(supabase, user.id);
-  const tier = getAccountPlan(user, entitlements).tier;
-  if (!canAccessFeature(tier, "starter_analysis")) {
-    return NextResponse.json(
-      { error: "Starter analysis is not available for this account." },
-      { status: 403 }
-    );
-  }
-
   let body: unknown;
   try {
     body = await request.json();
@@ -167,82 +156,81 @@ export async function POST(request: NextRequest) {
     if (existingAnalysis.candidate_id === body.candidate.id) {
       return NextResponse.json({
         result: cachedResult,
-        starterAnalysesRemaining: tier === "free" ? 0 : getStarterAnalysisLimit(),
+        starterAnalysesRemaining: Math.max(
+          0,
+          getStarterAnalysisLimit() - 1
+        ),
       });
     }
 
-    if (tier === "free") {
+    return NextResponse.json(
+      {
+        error:
+          "Your starter analysis is already tied to another candidate on this account.",
+        starterAnalysesRemaining: 0,
+        result: cachedResult,
+      },
+      { status: 403 }
+    );
+  }
+
+  try {
+    const ipQuotaFailure = await enforceQuotaRules(
+      supabase,
+      buildScopedIpQuotaRules(request, getStarterAnalysisIpQuotaRules())
+    );
+    if (ipQuotaFailure) {
       return NextResponse.json(
         {
           error:
-            "Your free starter analysis is already tied to another candidate. Upgrade to unlock full-ballot research.",
+            "Starter analysis is temporarily rate limited on this connection. Try again later or sign in from your normal device.",
+          starterAnalysesRemaining: await getStarterAnalysisRemaining(supabase),
+        },
+        { status: 429 }
+      );
+    }
+
+    const quotaFailure = await enforceStarterAnalysisQuota(supabase);
+    if (quotaFailure) {
+      await recordAppEvent({
+        category: "research",
+        event: "starter_quota_reached",
+        severity: "warning",
+        route: "/api/starter-analysis",
+        userId: user.id,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Your starter analysis has already been used for this account.",
           starterAnalysesRemaining: 0,
-          result: cachedResult,
         },
         { status: 403 }
       );
     }
-  }
-
-  if (tier === "free") {
-    try {
-      const ipQuotaFailure = await enforceQuotaRules(
-        supabase,
-        buildScopedIpQuotaRules(request, getStarterAnalysisIpQuotaRules())
-      );
-      if (ipQuotaFailure) {
-        return NextResponse.json(
-          {
-            error:
-              "Starter analysis is temporarily rate limited on this connection. Try again later or sign in from your normal device.",
-            starterAnalysesRemaining: await getStarterAnalysisRemaining(supabase),
-          },
-          { status: 429 }
-        );
-      }
-
-      const quotaFailure = await enforceStarterAnalysisQuota(supabase);
-      if (quotaFailure) {
-        await recordAppEvent({
-          category: "research",
-          event: "starter_quota_reached",
-          severity: "warning",
-          route: "/api/starter-analysis",
-          userId: user.id,
-        });
-        return NextResponse.json(
-          {
-            error:
-              "Your free starter analysis has already been used. Upgrade to unlock full-ballot research.",
-            starterAnalysesRemaining: 0,
-          },
-          { status: 403 }
-        );
-      }
-    } catch (error) {
-      await recordAppEvent({
-        category: "research",
-        event: "starter_quota_failed",
-        severity: "error",
-        route: "/api/starter-analysis",
-        userId: user.id,
-        details: {
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to enforce starter analysis quota",
-        },
-      });
-      return NextResponse.json(
-        {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to enforce starter analysis quota",
-        },
-        { status: 503 }
-      );
-    }
+  } catch (error) {
+    await recordAppEvent({
+      category: "research",
+      event: "starter_quota_failed",
+      severity: "error",
+      route: "/api/starter-analysis",
+      userId: user.id,
+      details: {
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to enforce starter analysis quota",
+      },
+    });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to enforce starter analysis quota",
+      },
+      { status: 503 }
+    );
   }
 
   try {
@@ -322,9 +310,7 @@ export async function POST(request: NextRequest) {
     }
 
     const starterAnalysesRemaining =
-      tier === "free"
-        ? await getStarterAnalysisRemaining(supabase)
-        : getStarterAnalysisLimit();
+      await getStarterAnalysisRemaining(supabase);
 
     if (admin && (!cachedPersonalized || !isValidCandidateResult(cachedPersonalized))) {
       void saveCandidatePersonalizationCache(

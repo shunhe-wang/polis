@@ -255,11 +255,9 @@ export async function POST(request: NextRequest) {
     return new Response(
       JSON.stringify({
         error:
-          "This ballot is not unlocked for full research yet. Use an Election Pass or Power Pass to unlock it first.",
+          "This ballot is not unlocked for full research yet. Use 1 Election Pass credit to unlock it first.",
         canUnlock: guideAccess.canUnlock,
         electionPassCredits: guideAccess.electionPassCredits,
-        powerPassRunsRemaining: guideAccess.powerPassRunsRemaining,
-        powerPassExpiresAt: guideAccess.powerPassExpiresAt,
       }),
       { status: 403, headers: { "Content-Type": "application/json" } }
     );

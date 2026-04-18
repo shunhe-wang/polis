@@ -1,12 +1,6 @@
-import type { SupabaseClient, User } from "@supabase/supabase-js";
-import type { UserTier } from "@/lib/freemium";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type ProductKey =
-  | "guest"
-  | "free"
-  | "election_pass"
-  | "bundle_3"
-  | "power_14d";
+export type ProductKey = "election_pass";
 
 export interface AccountEntitlements {
   election_pass_credits: number;
@@ -14,19 +8,11 @@ export interface AccountEntitlements {
   power_pass_expires_at: string | null;
 }
 
-export interface AccountPlan {
-  tier: UserTier;
-  planKey: ProductKey;
-  planLabel: string;
-}
-
 export interface GuideAccessStatus {
   unlocked: boolean;
-  source: "existing" | "election_pass" | "power_pass" | null;
+  source: "existing" | "election_pass" | null;
   canUnlock: boolean;
   electionPassCredits: number;
-  powerPassRunsRemaining: number;
-  powerPassExpiresAt: string | null;
 }
 
 export const DEFAULT_ENTITLEMENTS: AccountEntitlements = {
@@ -36,48 +22,22 @@ export const DEFAULT_ENTITLEMENTS: AccountEntitlements = {
 };
 
 export interface ProductConfig {
-  key: Exclude<ProductKey, "guest" | "free">;
+  key: ProductKey;
   label: string;
   description: string;
   priceEnv: string;
+  creditsGranted: number;
 }
 
 const PRODUCT_CONFIGS: ProductConfig[] = [
   {
     key: "election_pass",
     label: "Election Pass",
-    description: "Unlock one full ballot guide for one ballot.",
+    description: "Adds one ballot unlock credit to your account.",
     priceEnv: "STRIPE_PRICE_ELECTION_PASS",
-  },
-  {
-    key: "bundle_3",
-    label: "3-Pack",
-    description: "Three ballot unlocks you can use over time.",
-    priceEnv: "STRIPE_PRICE_BUNDLE_3",
-  },
-  {
-    key: "power_14d",
-    label: "Power Pass",
-    description: "Ten unlocks over a 14-day power-user window.",
-    priceEnv: "STRIPE_PRICE_POWER_14D",
+    creditsGranted: 1,
   },
 ];
-
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-function getProEmails(): string[] {
-  return (process.env.PRO_EMAILS ?? "")
-    .split(",")
-    .map((email) => email.trim())
-    .filter(Boolean)
-    .map(normalizeEmail);
-}
-
-export function hasPaidOverride(user: Pick<User, "email"> | null): boolean {
-  return !!user?.email && getProEmails().includes(normalizeEmail(user.email));
-}
 
 export function listProductConfigs(): ProductConfig[] {
   return PRODUCT_CONFIGS;
@@ -87,9 +47,7 @@ export function getProductConfig(key: string): ProductConfig | null {
   return PRODUCT_CONFIGS.find((product) => product.key === key) ?? null;
 }
 
-export function getProductPriceId(
-  key: Exclude<ProductKey, "guest" | "free">
-): string | null {
+export function getProductPriceId(key: ProductKey): string | null {
   const product = getProductConfig(key);
   if (!product) return null;
   return process.env[product.priceEnv] ?? null;
@@ -98,18 +56,7 @@ export function getProductPriceId(
 export function isStripeConfigured(): boolean {
   return Boolean(
     process.env.STRIPE_SECRET_KEY &&
-      PRODUCT_CONFIGS.some((product) => Boolean(process.env[product.priceEnv]))
-  );
-}
-
-export function isPowerPassActive(
-  entitlements: AccountEntitlements,
-  now = new Date()
-): boolean {
-  return (
-    entitlements.power_pass_runs_remaining > 0 &&
-    !!entitlements.power_pass_expires_at &&
-    new Date(entitlements.power_pass_expires_at).getTime() > now.getTime()
+      PRODUCT_CONFIGS.every((product) => Boolean(process.env[product.priceEnv]))
   );
 }
 
@@ -136,55 +83,9 @@ export async function getCurrentEntitlements(
   };
 }
 
-export function getAccountPlan(
-  user: Pick<User, "email"> | null,
-  entitlements: AccountEntitlements
-): AccountPlan {
-  if (!user?.email) {
-    return {
-      tier: "guest",
-      planKey: "guest",
-      planLabel: "Guest",
-    };
-  }
-
-  if (isPowerPassActive(entitlements)) {
-    return {
-      tier: "pro",
-      planKey: "power_14d",
-      planLabel: "Power Pass",
-    };
-  }
-
-  if (entitlements.election_pass_credits > 0) {
-    return {
-      tier: "pro",
-      planKey: "election_pass",
-      planLabel:
-        entitlements.election_pass_credits > 1
-          ? `${entitlements.election_pass_credits} Election Passes`
-          : "Election Pass",
-    };
-  }
-
-  if (hasPaidOverride(user)) {
-    return {
-      tier: "pro",
-      planKey: "power_14d",
-      planLabel: "Paid Access (Override)",
-    };
-  }
-
-  return {
-    tier: "free",
-    planKey: "free",
-    planLabel: "Free",
-  };
-}
-
 export async function getGuideAccessStatus(
   supabase: SupabaseClient,
-  user: Pick<User, "id" | "email"> | null,
+  user: { id: string } | null,
   ballotHash: string
 ): Promise<GuideAccessStatus> {
   if (!user) {
@@ -193,19 +94,6 @@ export async function getGuideAccessStatus(
       source: null,
       canUnlock: false,
       electionPassCredits: 0,
-      powerPassRunsRemaining: 0,
-      powerPassExpiresAt: null,
-    };
-  }
-
-  if (hasPaidOverride(user)) {
-    return {
-      unlocked: true,
-      source: "existing",
-      canUnlock: false,
-      electionPassCredits: 0,
-      powerPassRunsRemaining: 0,
-      powerPassExpiresAt: null,
     };
   }
 
@@ -220,8 +108,7 @@ export async function getGuideAccessStatus(
 
   const hasExistingGrant =
     !!data &&
-    (!data.expires_at ||
-      new Date(data.expires_at).getTime() > Date.now());
+    (!data.expires_at || new Date(data.expires_at).getTime() > Date.now());
 
   if (hasExistingGrant) {
     return {
@@ -229,19 +116,13 @@ export async function getGuideAccessStatus(
       source: "existing",
       canUnlock: false,
       electionPassCredits: entitlements.election_pass_credits,
-      powerPassRunsRemaining: entitlements.power_pass_runs_remaining,
-      powerPassExpiresAt: entitlements.power_pass_expires_at,
     };
   }
 
-  const hasPowerPass = isPowerPassActive(entitlements);
   return {
     unlocked: false,
     source: null,
-    canUnlock:
-      hasPowerPass || entitlements.election_pass_credits > 0,
+    canUnlock: entitlements.election_pass_credits > 0,
     electionPassCredits: entitlements.election_pass_credits,
-    powerPassRunsRemaining: entitlements.power_pass_runs_remaining,
-    powerPassExpiresAt: entitlements.power_pass_expires_at,
   };
 }

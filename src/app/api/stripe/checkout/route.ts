@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
     metadata: {
       user_id: user.id,
       product_key: product.key,
+      quantity: "1",
     },
   });
 

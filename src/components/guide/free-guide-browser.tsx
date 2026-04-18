@@ -1,65 +1,55 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronUp } from "lucide-react";
 import { CandidateCard } from "@/components/guide/candidate-card";
 import { CollapsibleContent } from "@/components/guide/collapsible-content";
 import { buildCandidateSourceLinks } from "@/lib/candidate-links";
+import { formatPartyInline } from "@/lib/party-format";
 import type {
   BallotInput,
   Candidate,
   CandidateResult,
   Race,
 } from "@/lib/types";
-import type { UserTier } from "@/lib/freemium";
-import { useState } from "react";
-import { formatPartyInline } from "@/lib/party-format";
 
 interface FreeGuideBrowserProps {
   ballotInput: BallotInput;
-  userTier: UserTier;
   trustedAccount: boolean;
   trustReason: string | null;
   starterAnalysesRemaining: number;
+  electionPassCredits: number;
   starterResult: CandidateResult | null;
   starterError: string | null;
   analyzingCandidateId: string | null;
   onAnalyzeCandidate: (candidate: Candidate, race: Race) => void;
-  onSignUp: () => void;
-  onSignIn: () => void;
   onEditBallot: () => void;
 }
 
 export function FreeGuideBrowser({
   ballotInput,
-  userTier,
   trustedAccount,
   trustReason,
   starterAnalysesRemaining,
+  electionPassCredits,
   starterResult,
   starterError,
   analyzingCandidateId,
   onAnalyzeCandidate,
-  onSignUp,
-  onSignIn,
   onEditBallot,
 }: FreeGuideBrowserProps) {
   const [collapsedRaceIds, setCollapsedRaceIds] = useState<string[]>([]);
   const [measuresCollapsed, setMeasuresCollapsed] = useState(false);
-  const planHeading = userTier === "pro" ? "Ballot Browser" : "Free Plan";
-  const starterPlanCopy =
-    userTier === "guest"
-      ? "Browse your ballot, open source links for each candidate, and create a free account to unlock 1 starter candidate analysis."
-      : userTier === "pro"
-        ? "This ballot is not unlocked yet. Browse candidate links first, then spend a pass only when you want the full personalized guide."
-      : !trustedAccount
-        ? trustReason ??
-          "Verify your email with a real inbox before starter analysis or paid passes will work."
-      : starterAnalysesRemaining > 0
-        ? `Browse your ballot, open source links for each candidate, and unlock ${starterAnalysesRemaining} free starter candidate analysis${starterAnalysesRemaining === 1 ? "" : "es"}.`
-        : "Browse your ballot and open source links for each candidate. Your free starter candidate analysis has already been used.";
+
+  const introCopy = !trustedAccount
+    ? trustReason ??
+      "Verify your email with a real inbox before starter analysis or credit purchases will work."
+    : starterAnalysesRemaining > 0
+      ? `Browse your ballot, open source links, and use ${starterAnalysesRemaining} starter analysis${starterAnalysesRemaining === 1 ? "" : "es"} on the candidate you care about most.`
+      : "Browse your ballot and open source links. Your starter analysis has already been used on this account.";
 
   return (
     <div className="space-y-8">
@@ -67,29 +57,27 @@ export function FreeGuideBrowser({
         <CardContent className="pt-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
-              <h2 className="text-lg font-semibold">{planHeading}</h2>
+              <h2 className="text-lg font-semibold">Ballot Browser</h2>
+              <p className="text-sm text-muted-foreground">{introCopy}</p>
               <p className="text-sm text-muted-foreground">
-                {starterPlanCopy}
+                Full personalized ballot research, measure analysis, and
+                sharing start after you unlock this ballot with 1 credit.
               </p>
-              <p className="text-sm text-muted-foreground">
-                {userTier === "pro"
-                  ? "Full personalized ballot research, measure analysis, and sharing start only after you unlock this ballot."
-                  : "Full personalized ballot research, measure analysis, and sharing unlock with a paid pass."}
-              </p>
-              {!trustedAccount && userTier !== "guest" && (
+              {!trustedAccount && (
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
                   Starter analysis and checkout stay locked until this account uses a verified, non-disposable email.
                 </p>
               )}
             </div>
-            {userTier === "guest" && (
-              <div className="flex flex-col gap-2 sm:min-w-40">
-                <Button onClick={onSignUp}>Sign Up Free</Button>
-                <Button variant="outline" onClick={onSignIn}>
-                  Sign In
-                </Button>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                {starterAnalysesRemaining} starter analysis
+                {starterAnalysesRemaining === 1 ? "" : "es"}
+              </span>
+              <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
+                {electionPassCredits} credit{electionPassCredits === 1 ? "" : "s"}
+              </span>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -148,61 +136,47 @@ export function FreeGuideBrowser({
 
           <CollapsibleContent open={!collapsedRaceIds.includes(race.id)}>
             <div className="space-y-3">
-            {race.candidates.map((candidate) => {
-              const isUnlockedCandidate =
-                starterResult?.candidateId === candidate.id;
-              const sourceLinks = buildCandidateSourceLinks(
-                candidate,
-                race.name,
-                ballotInput.state
-              );
+              {race.candidates.map((candidate) => {
+                const isUnlockedCandidate =
+                  starterResult?.candidateId === candidate.id;
+                const sourceLinks = buildCandidateSourceLinks(
+                  candidate,
+                  race.name,
+                  ballotInput.state
+                );
 
-              return (
-                <Card key={candidate.id}>
-                  <CardContent className="pt-4">
-                    <div className="flex flex-col gap-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <h3 className="text-base font-semibold">
-                            {candidate.name}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {candidate.party
-                              ? formatPartyInline(candidate.party)
-                              : "Party not listed"}
-                          </p>
+                return (
+                  <Card key={candidate.id}>
+                    <CardContent className="pt-4">
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <h3 className="text-base font-semibold">
+                              {candidate.name}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              {candidate.party
+                                ? formatPartyInline(candidate.party)
+                                : "Party not listed"}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {sourceLinks.map((link) => (
+                              <a
+                                key={link.label}
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              >
+                                {link.label}
+                              </a>
+                            ))}
+                          </div>
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          {sourceLinks.map((link) => (
-                            <a
-                              key={link.label}
-                              href={link.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            >
-                              {link.label}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {userTier === "guest" ? (
-                          <>
-                            <Button size="sm" onClick={onSignUp}>
-                              Unlock 1 Free Analysis
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={onSignIn}>
-                              Already have an account?
-                            </Button>
-                          </>
-                        ) : userTier === "pro" ? (
-                          <Button size="sm" variant="outline" disabled>
-                            Unlock this ballot above for full analysis
-                          </Button>
-                        ) : (
                           <Button
                             size="sm"
                             variant={isUnlockedCandidate ? "outline" : "default"}
@@ -218,26 +192,25 @@ export function FreeGuideBrowser({
                               ? "Analyzing..."
                               : !trustedAccount
                                 ? "Verify Email First"
-                              : isUnlockedCandidate
-                                ? "Starter Analysis Unlocked"
-                                : starterAnalysesRemaining > 0
-                                  ? "Use Free Analysis"
-                                  : "Free Analysis Used"}
+                                : isUnlockedCandidate
+                                  ? "Starter Analysis Unlocked"
+                                  : starterAnalysesRemaining > 0
+                                    ? "Use Starter Analysis"
+                                    : "Starter Analysis Used"}
                           </Button>
+                        </div>
+
+                        {isUnlockedCandidate && starterResult && (
+                          <CandidateCard
+                            result={starterResult}
+                            isRecommended={false}
+                          />
                         )}
                       </div>
-
-                      {isUnlockedCandidate && starterResult && (
-                        <CandidateCard
-                          result={starterResult}
-                          isRecommended={false}
-                        />
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </CollapsibleContent>
         </section>
@@ -249,7 +222,7 @@ export function FreeGuideBrowser({
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold">Ballot Measures</h2>
               <Badge variant="secondary" className="text-xs">
-                Paid Pass
+                Unlock with 1 credit
               </Badge>
             </div>
             <Button
@@ -272,18 +245,18 @@ export function FreeGuideBrowser({
             </Button>
           </div>
           <CollapsibleContent open={!measuresCollapsed}>
-          <div className="space-y-3">
-            {ballotInput.measures.map((measure) => (
-              <Card key={measure.id}>
-                <CardContent className="pt-4">
-                  <h3 className="text-sm font-semibold">{measure.title}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {measure.description}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+            <div className="space-y-3">
+              {ballotInput.measures.map((measure) => (
+                <Card key={measure.id}>
+                  <CardContent className="pt-4">
+                    <h3 className="text-sm font-semibold">{measure.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {measure.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </CollapsibleContent>
         </section>
       )}

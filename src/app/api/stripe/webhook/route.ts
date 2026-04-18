@@ -26,66 +26,64 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     throw new Error("Checkout session is missing a valid user or product");
   }
 
+  const quantity =
+    Array.isArray(session.line_items?.data) &&
+    typeof session.line_items.data[0]?.quantity === "number"
+      ? session.line_items.data[0].quantity
+      : typeof session.metadata?.quantity === "string"
+        ? Number.parseInt(session.metadata.quantity, 10) || 1
+      : 1;
   const stripeCustomerId =
     typeof session.customer === "string" ? session.customer : null;
-  if (stripeCustomerId) {
-    await admin.from("billing_customers").upsert(
-      {
-        user_id: userId,
-        stripe_customer_id: stripeCustomerId,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
-  }
-
-  const { error: orderError } = await admin.from("billing_orders").upsert(
+  const purchasedAt =
+    typeof session.created === "number"
+      ? new Date(session.created * 1000).toISOString()
+      : new Date().toISOString();
+  const { data: fulfillmentRows, error: fulfillmentError } = await admin.rpc(
+    "fulfill_billing_checkout",
     {
-      user_id: userId,
-      stripe_checkout_session_id: session.id,
-      stripe_customer_id: stripeCustomerId,
-      stripe_payment_intent_id:
+      p_user_id: userId,
+      p_stripe_checkout_session_id: session.id,
+      p_stripe_customer_id: stripeCustomerId,
+      p_stripe_payment_intent_id:
         typeof session.payment_intent === "string"
           ? session.payment_intent
           : null,
-      product_key: productKey,
-      quantity: 1,
-      amount_total: session.amount_total,
-      currency: session.currency,
-      status: session.payment_status ?? "completed",
-      metadata: session.metadata ?? {},
-      purchased_at: new Date().toISOString(),
-    },
-    { onConflict: "stripe_checkout_session_id" }
-  );
-
-  if (orderError) {
-    throw new Error(`Failed to persist billing order: ${orderError.message}`);
-  }
-
-  const { error: entitlementError } = await admin.rpc(
-    "grant_billing_entitlement",
-    {
-      p_user_id: userId,
       p_product_key: productKey,
+      p_quantity: quantity,
+      p_amount_total: session.amount_total,
+      p_currency: session.currency,
+      p_status: session.payment_status ?? "completed",
+      p_metadata: session.metadata ?? {},
+      p_purchased_at: purchasedAt,
       p_now: new Date().toISOString(),
     }
   );
 
-  if (entitlementError) {
+  if (fulfillmentError) {
     throw new Error(
-      `Failed to grant billing entitlement: ${entitlementError.message}`
+      `Failed to fulfill billing checkout: ${fulfillmentError.message}`
     );
   }
 
+  const fulfillment = Array.isArray(fulfillmentRows)
+    ? fulfillmentRows[0]
+    : fulfillmentRows;
+  const duplicate =
+    !!fulfillment &&
+    typeof fulfillment === "object" &&
+    "already_fulfilled" in fulfillment &&
+    Boolean(fulfillment.already_fulfilled);
+
   await recordAppEvent({
     category: "billing",
-    event: "checkout_completed",
+    event: duplicate ? "checkout_completed_duplicate" : "checkout_completed",
     route: "/api/stripe/webhook",
     userId,
     details: {
       checkoutSessionId: session.id,
       productKey,
+      quantity,
       amountTotal: session.amount_total,
       currency: session.currency,
     },

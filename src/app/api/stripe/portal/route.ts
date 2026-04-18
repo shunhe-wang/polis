@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(
     {
       error:
-        "Billing portal is not used for one-time election passes. Buy another pass from pricing instead.",
+        "Billing portal is not used for one-time Election Pass credits. Buy another credit from pricing instead.",
     },
     { status: 404 }
   );

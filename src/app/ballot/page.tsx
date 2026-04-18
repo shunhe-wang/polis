@@ -332,7 +332,7 @@ export default function BallotPage() {
       setStorageError(null);
     }
     void saveBallotInput(ballotInput);
-    if (account.tier === "guest") {
+    if (!account.isAuthenticated) {
       router.push("/start?intent=guide");
       return;
     }
@@ -534,32 +534,29 @@ export default function BallotPage() {
           </div>
         )}
 
-        {!returnToGuide && account.tier === "guest" && (
+        {!returnToGuide && !account.isAuthenticated && (
           <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <p className="text-sm font-medium">Guest mode stops at the ballot</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Build your ballot now, then create a free account to unlock
-              candidate links and your starter analysis.
+              Build your ballot now, then create an account to unlock
+              starter analysis and buy credits when you need the full guide.
             </p>
           </div>
         )}
 
-        {!returnToGuide && account.tier !== "guest" && (
+        {!returnToGuide && account.isAuthenticated && (
           <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <p className="text-sm font-medium">
-              {account.tier === "free"
-                ? "Free plan: ballot, links, and 1 starter analysis"
-                : "Pass unlocked: full guide available for this ballot"}
+              {account.electionPassCredits > 0
+                ? "Credits available: unlock a ballot when you are ready"
+                : "Signed-in account: browse now, buy credits later"}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {account.tier === "free"
-                ? account.trustedAccount
-                  ? "Continue to the guide to browse candidate links and spend your one free starter analysis on the candidate you care about most."
-                  : account.trustReason ?? "Verify your email to unlock AI features."
-                : "Continue to the guide when you are ready to run the full personalized analysis."}
+              {account.trustedAccount
+                ? "Continue to the guide to browse candidate links, use your starter analysis, or spend 1 credit when this ballot is final."
+                : account.trustReason ?? "Verify your email to unlock AI features."}
             </p>
             {(account.electionPassCredits > 0 ||
-              account.powerPassRunsRemaining > 0 ||
               account.starterAnalysesRemaining > 0) && (
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 {account.starterAnalysesRemaining > 0 && (
@@ -572,12 +569,6 @@ export default function BallotPage() {
                   <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
                     {account.electionPassCredits} election pass credit
                     {account.electionPassCredits === 1 ? "" : "s"}
-                  </span>
-                )}
-                {account.powerPassRunsRemaining > 0 && (
-                  <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
-                    {account.powerPassRunsRemaining} power pass run
-                    {account.powerPassRunsRemaining === 1 ? "" : "s"}
                   </span>
                 )}
               </div>
@@ -1080,8 +1071,7 @@ export default function BallotPage() {
               locality={addressDraft.city || null}
               address={address || manualLookupAddress || null}
               electionId={election?.id ?? null}
-              userTier={account.tier}
-              canLookupCandidates={account.tier === "pro" && account.trustedAccount}
+              canLookupCandidates={account.isAuthenticated && account.trustedAccount}
             />
 
             {/* Ballot Measures */}
@@ -1153,13 +1143,11 @@ export default function BallotPage() {
           <Button onClick={handleContinue} disabled={!canContinue}>
             {returnToGuide
               ? "Update Guide"
-              : account.tier === "guest"
-              ? "Create Account to Open Guide"
-              : account.tier === "free"
-                ? account.trustedAccount
-                  ? "Browse Candidates & Use Free Analysis"
-                  : "Verify Email to Unlock Guide Features"
-                : "Generate Voter Guide"}
+              : !account.isAuthenticated
+                ? "Create Account to Open Guide"
+                : account.trustedAccount
+                  ? "Browse Candidates & Open Guide"
+                  : "Verify Email to Unlock Guide Features"}
           </Button>
         </div>
 

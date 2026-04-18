@@ -40,12 +40,12 @@ export default function StartPage() {
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             {intentGuide
-              ? "Guest mode stops at ballot building. Sign in or create a free account to open the guide, keep your ballot saved, and unlock research features."
+              ? "Guest mode stops at ballot building. Sign in or create an account to open the guide, keep your ballot saved, and buy credits when you need a full unlock."
               : "If you sign in now, your values profile and ballot will be saved as you go. If you continue as a guest, you can still build your ballot before deciding to create an account."}
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground">
-            Free accounts unlock candidate links and one starter analysis. Full
-            guide research unlocks per ballot with a paid pass.
+            Signed-in accounts can save progress, keep a starter analysis on the
+            account, and buy Election Pass credits when they want a full guide.
           </p>
         </div>
 
@@ -73,7 +73,7 @@ export default function StartPage() {
               <h2 className="mt-4 text-lg font-semibold">Create Free Account</h2>
               <p className="mt-2 flex-1 text-sm text-muted-foreground">
                 Save your values profile, keep your ballot synced, and unlock
-                your free starter candidate analysis.
+                account-based features when you are ready.
               </p>
               <Button
                 className="mt-5 rounded-full bg-[linear-gradient(135deg,rgba(14,116,144,0.96),rgba(15,23,42,0.96))] text-white shadow-[0_20px_40px_-20px_rgba(8,47,73,0.75)] hover:opacity-95 dark:text-white"
@@ -111,12 +111,12 @@ export default function StartPage() {
         <div className="rounded-[1.5rem] border border-black/5 bg-background/70 p-5 text-sm text-muted-foreground dark:border-white/10">
           <div className="flex items-center gap-2">
             <Crown className="size-4 text-cyan-700 dark:text-cyan-300" />
-            <p className="font-medium text-foreground">Paid passes unlock the full guide</p>
+            <p className="font-medium text-foreground">Credits unlock the full guide</p>
           </div>
           <p className="mt-2">
-            Election passes unlock full-ballot personalized research,
-            ballot-measure analysis, and sharing when you need them. Free
-            accounts get candidate links plus one starter analysis.
+            Election Pass credits unlock full-ballot personalized research,
+            ballot-measure analysis, and sharing when you need them. You can
+            browse as a guest first, then create an account before buying.
           </p>
           <Link
             href="/pricing"
@@ -125,7 +125,7 @@ export default function StartPage() {
               className: "mt-4 rounded-full",
             })}
           >
-            View Plans
+            View Credits
           </Link>
         </div>
       </div>

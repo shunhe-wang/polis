@@ -58,31 +58,30 @@ export function AppHeader() {
         </Link>
         <div className="flex items-center justify-end gap-2">
           <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
-            <Badge variant="outline" className="rounded-full px-3 py-1">
-              {account.planLabel}
-            </Badge>
-            {account.tier === "free" && (
-              <Badge variant="outline" className="rounded-full px-3 py-1">
-                {account.starterAnalysesRemaining} starter
-                {account.starterAnalysesRemaining === 1 ? "" : "s"}
-              </Badge>
-            )}
             {account.electionPassCredits > 0 && (
               <Badge variant="outline" className="rounded-full px-3 py-1">
                 {account.electionPassCredits} pass
                 {account.electionPassCredits === 1 ? "" : "es"}
               </Badge>
             )}
-            {account.powerPassRunsRemaining > 0 && (
-              <Badge variant="outline" className="rounded-full px-3 py-1">
-                {account.powerPassRunsRemaining} power run
-                {account.powerPassRunsRemaining === 1 ? "" : "s"}
-              </Badge>
-            )}
           </div>
+          {account.isAuthenticated && (
+            <>
+              <Link href="/guides">
+                <Button variant="outline" size="sm">
+                  My Guides
+                </Button>
+              </Link>
+              <Link href="/onboarding">
+                <Button variant="outline" size="sm">
+                  Edit Values
+                </Button>
+              </Link>
+            </>
+          )}
           <Link href="/pricing">
             <Button variant="outline" size="sm">
-              Buy Passes
+              Buy Credits
             </Button>
           </Link>
           {account.isAuthenticated ? (

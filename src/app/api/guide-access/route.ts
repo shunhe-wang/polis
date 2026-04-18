@@ -68,8 +68,6 @@ export async function POST(request: NextRequest) {
       canUnlock: false,
       source: null,
       electionPassCredits: 0,
-      powerPassRunsRemaining: 0,
-      powerPassExpiresAt: null,
       requiresAuth: true,
     });
   }
@@ -83,8 +81,6 @@ export async function POST(request: NextRequest) {
         canUnlock: false,
         source: null,
         electionPassCredits: 0,
-        powerPassRunsRemaining: 0,
-        powerPassExpiresAt: null,
       },
       { status: 403 }
     );
@@ -119,13 +115,11 @@ export async function POST(request: NextRequest) {
       const entitlements = await getCurrentEntitlements(supabase, user.id);
       return NextResponse.json(
         {
-          error: "No paid unlocks are available for this ballot.",
+          error: "No credits are available to unlock this ballot.",
           unlocked: false,
           canUnlock: false,
           source: null,
           electionPassCredits: entitlements.election_pass_credits,
-          powerPassRunsRemaining: entitlements.power_pass_runs_remaining,
-          powerPassExpiresAt: entitlements.power_pass_expires_at,
         },
         { status: 403 }
       );
@@ -140,7 +134,6 @@ export async function POST(request: NextRequest) {
         ballotHash,
         source: row.source,
         electionPassCredits: row.election_pass_credits,
-        powerPassRunsRemaining: row.power_pass_runs_remaining,
       },
     });
 
@@ -149,8 +142,6 @@ export async function POST(request: NextRequest) {
       canUnlock: false,
       source: row.source,
       electionPassCredits: Number(row.election_pass_credits ?? 0),
-      powerPassRunsRemaining: Number(row.power_pass_runs_remaining ?? 0),
-      powerPassExpiresAt: row.power_pass_expires_at ?? null,
     });
   }
 
