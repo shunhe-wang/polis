@@ -62,7 +62,7 @@ The repository pins `next@16.2.1`. The July 4 `npm audit` reports high-severity 
 
 The admin dashboard reports zeroes and labels API usage as “Not yet wired.” Before launch, add provider cost/latency/error dashboards, Stripe/StoreKit fulfillment reconciliation, queue depth, quota denials, and election-data freshness. Configure external error reporting and alerts rather than relying only on database event logs.
 
-**Implementation status (July 5):** partially complete. The restricted dashboard now reports real user, saved-guide, research, Z.AI call/error/latency/token/cost, web revenue, unfulfilled-order, recorded quota-denial, and recent-error metrics. Live provider telemetry was verified through the candidate route. Cost estimates remain disabled until current model rates are configured. External error reporting, alert delivery, queue depth, election-data freshness, and StoreKit reconciliation remain outstanding.
+**Implementation status (July 5):** partially complete. The restricted dashboard now reports real user, saved-guide, research, Z.AI call/error/latency/token/cost, web revenue, unfulfilled-order, recorded quota-denial, recent-error, and election-data freshness metrics. Live provider telemetry was verified through the candidate route. A daily authenticated production cron probes the Google Civic ballot path and reports healthy, degraded, failed, or stale status without logging the configured address. Cost estimates remain disabled until current model rates are configured. External error reporting, alert delivery, queue depth, and StoreKit reconciliation remain outstanding.
 
 ## App Store decisions
 

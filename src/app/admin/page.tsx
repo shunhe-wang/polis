@@ -7,7 +7,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminEmail } from "@/lib/admin";
-import { loadAdminDashboardData } from "@/lib/admin-dashboard";
+import {
+  loadAdminDashboardData,
+  type ElectionDataStatus,
+} from "@/lib/admin-dashboard";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -148,6 +151,46 @@ export default async function AdminPage() {
 
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Election Data Freshness</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Daily authenticated probe of the Google Civic ballot path.
+              </p>
+            </div>
+            <Badge variant={electionDataBadgeVariant(dashboard.electionDataStatus)}>
+              {formatElectionDataStatus(dashboard.electionDataStatus)}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+            <StatCard
+              label="Last Probe"
+              value={
+                dashboard.latestElectionDataProbeAt
+                  ? formatTimestamp(dashboard.latestElectionDataProbeAt)
+                  : "No data"
+              }
+            />
+            <StatCard
+              label="Probe Latency"
+              value={formatDuration(dashboard.electionDataProbeLatencyMs)}
+            />
+            <StatCard
+              label="Ballot Returned"
+              value={
+                dashboard.electionDataHasBallot === null
+                  ? "No data"
+                  : dashboard.electionDataHasBallot
+                    ? "Yes"
+                    : "No"
+              }
+            />
+          </div>
+        </section>
+
+        <Separator className="my-8" />
+
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Billing and Quotas</h2>
             <Badge
               variant={dashboard.unfulfilledOrders > 0 ? "destructive" : "secondary"}
@@ -253,4 +296,21 @@ function formatTimestamp(value: string): string {
     timeStyle: "short",
     timeZone: "America/New_York",
   }).format(new Date(value));
+}
+
+function formatElectionDataStatus(
+  status: ElectionDataStatus
+): string {
+  if (status === "healthy") return "Healthy";
+  if (status === "degraded") return "Degraded";
+  if (status === "stale") return "Stale";
+  return "Not configured";
+}
+
+function electionDataBadgeVariant(
+  status: ElectionDataStatus
+): "secondary" | "destructive" | "outline" {
+  if (status === "healthy") return "secondary";
+  if (status === "unconfigured") return "outline";
+  return "destructive";
 }

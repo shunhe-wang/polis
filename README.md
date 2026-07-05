@@ -25,6 +25,11 @@ For admin cost estimates, set `ZAI_INPUT_USD_PER_MILLION`,
 current pricing page. Leave them unset rather than guessing when the configured
 model is not listed.
 
+The production deployment runs a daily Google Civic health probe. Set a strong
+`CRON_SECRET` and `ELECTION_FRESHNESS_PROBE_ADDRESS` to a stable, public test
+address whose expected ballot availability is understood by the operations
+team. The address is used for the lookup but is not written to operational logs.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

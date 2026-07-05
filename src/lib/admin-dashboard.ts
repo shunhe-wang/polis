@@ -23,6 +23,8 @@ interface AdminOperationsInput {
   events: AdminEventRow[];
   orders: AdminOrderRow[];
   providerPricing: ProviderPricing | null;
+  latestElectionDataProbe: AdminEventRow | null;
+  now?: Date;
 }
 
 interface ProviderPricing {
@@ -38,6 +40,12 @@ export interface AdminRecentError {
   message: string;
 }
 
+export type ElectionDataStatus =
+  | "healthy"
+  | "degraded"
+  | "stale"
+  | "unconfigured";
+
 export interface AdminDashboardData {
   totalUsers: number;
   activeGuides: number;
@@ -52,6 +60,10 @@ export interface AdminDashboardData {
   grossRevenueCents24h: number;
   unfulfilledOrders: number;
   recordedQuotaDenials24h: number;
+  electionDataStatus: ElectionDataStatus;
+  latestElectionDataProbeAt: string | null;
+  electionDataHasBallot: boolean | null;
+  electionDataProbeLatencyMs: number | null;
   recentErrors: AdminRecentError[];
   warnings: string[];
 }
@@ -63,6 +75,21 @@ function readFiniteNumber(value: unknown): number | null {
 export function summarizeAdminOperations(
   input: AdminOperationsInput
 ): Omit<AdminDashboardData, "warnings"> {
+  const now = input.now ?? new Date();
+  const latestProbe = input.latestElectionDataProbe;
+  const latestProbeTime = latestProbe
+    ? new Date(latestProbe.created_at).getTime()
+    : Number.NaN;
+  const probeIsStale =
+    Number.isFinite(latestProbeTime) &&
+    now.getTime() - latestProbeTime > 30 * 60 * 60 * 1000;
+  const electionDataStatus = !latestProbe
+    ? "unconfigured"
+    : probeIsStale
+      ? "stale"
+      : latestProbe.event === "election_data_probe_succeeded"
+        ? "healthy"
+        : "degraded";
   const providerEvents = input.events.filter(
     (event) => event.category === "provider" && event.event.startsWith("zai_")
   );
@@ -129,6 +156,14 @@ export function summarizeAdminOperations(
         event.event.endsWith("_quota_reached") ||
         event.event.includes("quota_denied")
     ).length,
+    electionDataStatus,
+    latestElectionDataProbeAt: latestProbe?.created_at ?? null,
+    electionDataHasBallot:
+      typeof latestProbe?.details?.hasBallot === "boolean"
+        ? latestProbe.details.hasBallot
+        : null,
+    electionDataProbeLatencyMs:
+      readFiniteNumber(latestProbe?.details?.durationMs) ?? null,
     recentErrors: input.events
       .filter((event) => event.severity === "error")
       .slice(0, 10)
@@ -175,25 +210,43 @@ export async function loadAdminDashboardData(
   admin: SupabaseClient
 ): Promise<AdminDashboardData> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [usersResult, guidesResult, eventsResult, ordersResult, unfulfilledResult] =
-    await Promise.all([
-      admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-      admin.from("saved_guides").select("id", { count: "exact", head: true }),
-      admin
-        .from("app_event_logs")
-        .select("category, event, severity, route, created_at, details")
-        .gte("created_at", since)
-        .order("created_at", { ascending: false })
-        .limit(250),
-      admin
-        .from("billing_orders")
-        .select("amount_total, currency, status")
-        .gte("purchased_at", since),
-      admin
-        .from("billing_orders")
-        .select("id", { count: "exact", head: true })
-        .is("fulfilled_at", null),
-    ]);
+  const [
+    usersResult,
+    guidesResult,
+    eventsResult,
+    ordersResult,
+    unfulfilledResult,
+    latestProbeResult,
+  ] = await Promise.all([
+    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    admin.from("saved_guides").select("id", { count: "exact", head: true }),
+    admin
+      .from("app_event_logs")
+      .select("category, event, severity, route, created_at, details")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(250),
+    admin
+      .from("billing_orders")
+      .select("amount_total, currency, status")
+      .gte("purchased_at", since),
+    admin
+      .from("billing_orders")
+      .select("id", { count: "exact", head: true })
+      .is("fulfilled_at", null),
+    admin
+      .from("app_event_logs")
+      .select("category, event, severity, route, created_at, details")
+      .eq("category", "election_data")
+      .in("event", [
+        "election_data_probe_succeeded",
+        "election_data_probe_degraded",
+        "election_data_probe_failed",
+      ])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const warnings: string[] = [];
   const providerPricing = getProviderPricing();
@@ -208,6 +261,9 @@ export async function loadAdminDashboardData(
   if (ordersResult.error) warnings.push("Recent billing totals are unavailable.");
   if (unfulfilledResult.error) {
     warnings.push("Billing reconciliation status is unavailable.");
+  }
+  if (latestProbeResult.error) {
+    warnings.push("Election-data freshness is unavailable.");
   }
   if (!providerPricing) {
     warnings.push(
@@ -231,6 +287,9 @@ export async function loadAdminDashboardData(
     events: (eventsResult.data ?? []) as AdminEventRow[],
     orders: (ordersResult.data ?? []) as AdminOrderRow[],
     providerPricing,
+    latestElectionDataProbe: latestProbeResult.error
+      ? null
+      : (latestProbeResult.data as AdminEventRow | null),
   });
 
   return { ...summary, warnings };

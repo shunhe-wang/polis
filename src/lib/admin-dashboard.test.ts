@@ -64,6 +64,20 @@ describe("admin dashboard operations summary", () => {
         outputUsdPerMillion: 3,
         webSearchUsdPerUse: 0.01,
       },
+      latestElectionDataProbe: {
+        category: "election_data",
+        event: "election_data_probe_succeeded",
+        severity: "info",
+        route: "/api/cron/election-data-freshness",
+        created_at: "2026-07-05T11:30:00.000Z",
+        details: {
+          hasBallot: true,
+          raceCount: 4,
+          measureCount: 1,
+          durationMs: 850,
+        },
+      },
+      now: new Date("2026-07-05T12:00:00.000Z"),
     });
 
     expect(summary).toMatchObject({
@@ -80,8 +94,35 @@ describe("admin dashboard operations summary", () => {
       grossRevenueCents24h: 200,
       unfulfilledOrders: 1,
       recordedQuotaDenials24h: 1,
+      electionDataStatus: "healthy",
+      latestElectionDataProbeAt: "2026-07-05T11:30:00.000Z",
+      electionDataHasBallot: true,
+      electionDataProbeLatencyMs: 850,
     });
     expect(summary.recentErrors).toHaveLength(1);
     expect(summary.recentErrors[0].message).toBe("Provider unavailable");
+  });
+
+  it("marks an old election-data probe as stale", () => {
+    const summary = summarizeAdminOperations({
+      totalUsers: 0,
+      activeGuides: 0,
+      configuredProUsers: 0,
+      unfulfilledOrders: 0,
+      events: [],
+      orders: [],
+      providerPricing: null,
+      latestElectionDataProbe: {
+        category: "election_data",
+        event: "election_data_probe_succeeded",
+        severity: "info",
+        route: "/api/cron/election-data-freshness",
+        created_at: "2026-07-03T12:00:00.000Z",
+        details: { hasBallot: false, durationMs: 500 },
+      },
+      now: new Date("2026-07-05T12:00:00.000Z"),
+    });
+
+    expect(summary.electionDataStatus).toBe("stale");
   });
 });
