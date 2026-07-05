@@ -1,7 +1,7 @@
 # PRIVACY POLICY
 
 **Atelier SW LLC d/b/a Polis**  
-**Last Updated:** April 18, 2026
+**Last Updated:** July 5, 2026
 
 This Privacy Policy describes how Atelier SW LLC, operating under the trade name Polis (**“Polis,” “we,” “us,”** or **“our”**), collects, uses, discloses, and otherwise handles information when you use our website, mobile application, and related services (collectively, the **“Services”**).
 
@@ -65,9 +65,18 @@ We do **not** sell your personal information for money. However, as described be
 
 ## 4. AI and Model Providers
 
-The Services may use third-party artificial intelligence, large language model, and other model or inference providers to process your inputs and generate outputs. As a result, information you submit through the Services, including prompts, survey responses, and other inputs, may be transmitted to and processed by such providers on our behalf.
+Polis uses **Z.AI** as its third-party artificial-intelligence provider for candidate research, ballot parsing, and personalized voter-guide analysis. Before Polis sends personal information to Z.AI, the Services present a separate disclosure and ask for your explicit permission.
 
-We may also use user inputs and outputs internally to operate, maintain, debug, evaluate, and improve the Services, subject to applicable law and our contractual commitments.
+If you approve that disclosure, the information sent to Z.AI may include:
+
+- issue priorities and policy preferences;
+- political identity and free-text values;
+- ballot, race, candidate, and measure details; and
+- uploaded or pasted ballot content.
+
+Polis records the disclosure version and the time you granted consent. You may decline and continue using non-AI ballot browsing and source links. You may also revoke consent from the Account page; future AI requests will remain blocked until you approve the current disclosure again.
+
+We may use user inputs and outputs internally to operate, maintain, debug, evaluate, and improve the Services, subject to applicable law and our contractual commitments.
 
 ## 5. Cookies, Analytics, Advertising, and Similar Technologies
 
@@ -127,7 +136,7 @@ We retain information for as long as reasonably necessary for the purposes descr
 
 Retention periods may vary depending on the nature of the information, the context in which it was collected, and legal or operational requirements.
 
-If you request deletion of your account, we will take reasonable steps to delete or de-identify applicable personal information within a reasonable period, subject to legal obligations, technical constraints, backup retention, fraud prevention, dispute resolution, and other legitimate business needs.
+When you delete your account in the Services, Polis deletes the authentication account and user-linked application records from the active database. Polis also attempts to delete the associated Stripe customer profile. Stripe or Polis may retain transaction, fraud-prevention, tax, accounting, dispute, security, or backup records where permitted or required by law.
 
 ## 8. Security
 
@@ -147,9 +156,11 @@ You may opt out of promotional emails by using the unsubscribe link in those mes
 
 You may be able to limit cookies and similar technologies through your browser or device settings. Some browsers also offer privacy controls relating to tracking technologies.
 
-### 9.4 Deletion Requests
+### 9.4 Account Deletion and Deletion Requests
 
-You may request deletion of your account or certain personal information by contacting us at **contact@getpolis.vote**. We may need to retain certain information as permitted or required by law.
+You may permanently delete your account from the **Account** page in the Services. Account deletion removes your login and user-linked Polis data, including saved profiles, ballots, guides, credits, and AI-consent records. Unused credits are forfeited when the account is deleted.
+
+You may also request deletion of certain personal information or ask questions about retained records by contacting us at **contact@getpolis.vote**. We may need to retain certain information as permitted or required by law.
 
 ### 9.5 U.S. State Privacy Rights
 

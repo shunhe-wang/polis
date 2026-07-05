@@ -33,7 +33,7 @@ const PRODUCT_CONFIGS: ProductConfig[] = [
   {
     key: "election_pass",
     label: "Election Pass",
-    description: "Adds one ballot unlock credit to your account.",
+    description: "Adds one $1 full-ballot guide credit to your account.",
     priceEnv: "STRIPE_PRICE_ELECTION_PASS",
     creditsGranted: 1,
   },

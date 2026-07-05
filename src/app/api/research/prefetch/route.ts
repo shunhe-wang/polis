@@ -4,11 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAccountTrustStatus } from "@/lib/account-trust";
 import type { BallotInput, CandidateDossier, MeasureDossier } from "@/lib/types";
 import {
+  isZaiConfigured,
   runCandidateDossierResearch,
   runMeasureDossierResearch,
   type MeasureResearchRequest,
   type ResearchRequest,
-} from "@/lib/anthropic";
+} from "@/lib/zai";
 import {
   buildCandidateDossierKey,
   buildMeasureDossierKey,
@@ -24,6 +25,16 @@ import {
 } from "@/lib/validation";
 import { createEmptyValuesProfile } from "@/lib/types";
 import { getSameOriginError } from "@/lib/csrf";
+import {
+  AI_CONSENT_REQUIRED_PAYLOAD,
+  AI_CONSENT_REQUIRED_STATUS,
+  userHasCurrentAiConsent,
+} from "@/lib/ai-consent";
+import { enforceQuotaRules, getPrefetchQuotaRules } from "@/lib/ai-quotas";
+import { buildScopedIpQuotaRules } from "@/lib/request-identity";
+import { recordAppEvent } from "@/lib/observability";
+
+export const maxDuration = 60;
 
 interface PrefetchBody {
   ballotInput: BallotInput;
@@ -99,11 +110,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: trust.reason }, { status: 403 });
   }
 
+  if (!(await userHasCurrentAiConsent(supabase, user.id))) {
+    return NextResponse.json(AI_CONSENT_REQUIRED_PAYLOAD, {
+      status: AI_CONSENT_REQUIRED_STATUS,
+    });
+  }
+
   const body = await request.json().catch(() => null);
   if (!validateBody(body)) {
     return NextResponse.json(
       { error: "Invalid prefetch payload" },
       { status: 400 }
+    );
+  }
+
+  if (!isZaiConfigured()) {
+    return NextResponse.json(
+      { error: "Z.AI API key is not configured" },
+      { status: 500 }
     );
   }
 
@@ -129,17 +153,20 @@ export async function POST(request: NextRequest) {
     .slice(0, getPrefetchMeasureLimit());
 
   const tasks: Array<() => Promise<void>> = [];
+  let warmedCandidates = 0;
+  let warmedMeasures = 0;
 
   for (const item of candidateItems) {
-    tasks.push(async () => {
-      const cacheKey = buildCandidateDossierKey(
-        item.candidate,
-        item.race,
-        item.state
-      );
-      const cached = await loadCandidateDossier(admin, cacheKey);
-      if (cached && isValidCandidateDossier(cached)) return;
+    const cacheKey = buildCandidateDossierKey(
+      item.candidate,
+      item.race,
+      item.state
+    );
+    const cached = await loadCandidateDossier(admin, cacheKey);
+    if (cached && isValidCandidateDossier(cached)) continue;
 
+    warmedCandidates += 1;
+    tasks.push(async () => {
       const requestBody: ResearchRequest = {
         candidate: item.candidate,
         race: item.race,
@@ -149,24 +176,26 @@ export async function POST(request: NextRequest) {
       const dossier: CandidateDossier = await runCandidateDossierResearch(
         requestBody
       );
-      if (isValidCandidateDossier(dossier)) {
-        await saveCandidateDossier(
-          admin,
-          cacheKey,
-          `${item.candidate.name} • ${item.race.name}`,
-          item.state,
-          dossier
-        );
+      if (!isValidCandidateDossier(dossier)) {
+        throw new Error("Z.AI returned an invalid candidate dossier");
       }
+      await saveCandidateDossier(
+        admin,
+        cacheKey,
+        `${item.candidate.name} • ${item.race.name}`,
+        item.state,
+        dossier
+      );
     });
   }
 
   for (const item of measureItems) {
-    tasks.push(async () => {
-      const cacheKey = buildMeasureDossierKey(item.measure, item.state);
-      const cached = await loadMeasureDossier(admin, cacheKey);
-      if (cached && isValidMeasureDossier(cached)) return;
+    const cacheKey = buildMeasureDossierKey(item.measure, item.state);
+    const cached = await loadMeasureDossier(admin, cacheKey);
+    if (cached && isValidMeasureDossier(cached)) continue;
 
+    warmedMeasures += 1;
+    tasks.push(async () => {
       const requestBody: MeasureResearchRequest = {
         measure: item.measure,
         state: item.state,
@@ -175,24 +204,78 @@ export async function POST(request: NextRequest) {
       const dossier: MeasureDossier = await runMeasureDossierResearch(
         requestBody
       );
-      if (isValidMeasureDossier(dossier)) {
-        await saveMeasureDossier(
-          admin,
-          cacheKey,
-          item.measure.title,
-          item.state,
-          dossier
-        );
+      if (!isValidMeasureDossier(dossier)) {
+        throw new Error("Z.AI returned an invalid measure dossier");
       }
+      await saveMeasureDossier(
+        admin,
+        cacheKey,
+        item.measure.title,
+        item.state,
+        dossier
+      );
     });
   }
 
-  void runWithConcurrencyLimit(tasks, 2).catch(() => {
-    // Best-effort shared dossier warming only.
-  });
+  const itemUnits = tasks.length;
+  if (itemUnits > 0) {
+    const quotaRules = getPrefetchQuotaRules();
+    let quotaFailure;
+    try {
+      quotaFailure = await enforceQuotaRules(supabase, [
+        ...quotaRules.map((rule) => ({ rule, incrementBy: itemUnits })),
+        ...buildScopedIpQuotaRules(request, quotaRules).map((entry) => ({
+          ...entry,
+          incrementBy: itemUnits,
+        })),
+      ]);
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to enforce prefetch quota",
+        },
+        { status: 503 }
+      );
+    }
+
+    if (quotaFailure) {
+      return NextResponse.json(
+        { error: "Research prefetch is rate limited right now." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(quotaFailure.retryAfterSeconds),
+          },
+        }
+      );
+    }
+
+    try {
+      await runWithConcurrencyLimit(tasks, 2);
+    } catch (error) {
+      await recordAppEvent({
+        category: "research",
+        event: "prefetch_failed",
+        severity: "error",
+        route: "/api/research/prefetch",
+        userId: user.id,
+        details: {
+          itemUnits,
+          message: error instanceof Error ? error.message : "Unknown error",
+        },
+      });
+      return NextResponse.json(
+        { error: "Research prefetch failed." },
+        { status: 502 }
+      );
+    }
+  }
 
   return NextResponse.json({
-    warmedCandidates: candidateItems.length,
-    warmedMeasures: measureItems.length,
+    warmedCandidates,
+    warmedMeasures,
   });
 }

@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import {
+  isZaiConfigured,
   personalizeCandidateDossier,
   personalizeMeasureDossier,
   type ResearchRequest,
   type MeasureResearchRequest,
   runCandidateDossierResearch,
   runMeasureDossierResearch,
-} from "@/lib/anthropic";
+} from "@/lib/zai";
 import type {
   ValuesProfile,
   BallotInput,
@@ -63,6 +64,11 @@ import { recordAppEvent } from "@/lib/observability";
 import { getAccountTrustStatus } from "@/lib/account-trust";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import { getSameOriginError } from "@/lib/csrf";
+import {
+  AI_CONSENT_REQUIRED_PAYLOAD,
+  AI_CONSENT_REQUIRED_STATUS,
+  userHasCurrentAiConsent,
+} from "@/lib/ai-consent";
 
 interface ResearchRequestBody {
   valuesProfile: ValuesProfile;
@@ -220,6 +226,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!(await userHasCurrentAiConsent(supabase, user.id))) {
+    return new Response(JSON.stringify(AI_CONSENT_REQUIRED_PAYLOAD), {
+      status: AI_CONSENT_REQUIRED_STATUS,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -237,9 +250,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isZaiConfigured()) {
     return new Response(
-      JSON.stringify({ error: "Anthropic API key is not configured" }),
+      JSON.stringify({ error: "Z.AI API key is not configured" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }

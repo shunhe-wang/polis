@@ -129,8 +129,8 @@ export function FreeTextInput({ value, onChange }: FreeTextInputProps) {
           <div>
             <p className="text-sm font-medium">Not sure what to write?</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Use one of these prompts with ChatGPT or Claude, then paste the
-              result back here and edit it however you want.
+              Use one of these prompts with your preferred AI assistant, then
+              paste the result back here and edit it however you want.
             </p>
           </div>
           <Button

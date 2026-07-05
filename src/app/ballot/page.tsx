@@ -43,6 +43,7 @@ import {
   getBallotDraftQualityLabel,
   getBallotDraftReviewHint,
 } from "@/lib/ballot-draft-quality";
+import { fetchWithAiConsent } from "@/lib/ai-consent-client";
 
 interface CivicApiResponse {
   state: string | null;
@@ -183,7 +184,7 @@ export default function BallotPage() {
       setAccount(summary);
       if (summary.isAuthenticated) {
         try {
-          const response = await fetch("/api/ballot/review-draft", {
+          const response = await fetchWithAiConsent("/api/ballot/review-draft", {
             cache: "no-store",
           });
           if (response.ok) {
@@ -377,7 +378,7 @@ export default function BallotPage() {
     setIsParsingDraft(true);
     setDraftError(null);
     try {
-      const response = await fetch("/api/ballot/review-draft", {
+      const response = await fetchWithAiConsent("/api/ballot/review-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -429,7 +430,7 @@ export default function BallotPage() {
         formData.set("state", state);
       }
 
-      const response = await fetch("/api/ballot/review-draft", {
+      const response = await fetchWithAiConsent("/api/ballot/review-draft", {
         method: "POST",
         body: formData,
       });
@@ -620,7 +621,7 @@ export default function BallotPage() {
                       </div>
                       <input
                         type="file"
-                        accept=".pdf,image/png,image/jpeg,image/webp"
+                        accept=".pdf,image/png,image/jpeg"
                         onChange={(event) =>
                           setDraftFile(event.target.files?.[0] ?? null)
                         }

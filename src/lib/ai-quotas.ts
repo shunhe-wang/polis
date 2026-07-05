@@ -71,6 +71,21 @@ export function getCandidateLookupQuotaRules(): QuotaRule[] {
   ];
 }
 
+export function getPrefetchQuotaRules(): QuotaRule[] {
+  return [
+    {
+      scope: "research_prefetch_items_10m",
+      windowMs: 10 * 60 * 1000,
+      maxUnits: parsePositiveInt(process.env.PREFETCH_ITEMS_PER_10M, 2),
+    },
+    {
+      scope: "research_prefetch_items_day",
+      windowMs: 24 * 60 * 60 * 1000,
+      maxUnits: parsePositiveInt(process.env.PREFETCH_ITEMS_PER_DAY, 10),
+    },
+  ];
+}
+
 export function getMaxResearchItems(): number {
   return parsePositiveInt(process.env.MAX_RESEARCH_ITEMS_PER_REQUEST, 12);
 }

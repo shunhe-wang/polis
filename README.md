@@ -16,6 +16,10 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+Copy `.env.example` to `.env.local`, then add your Z.AI key as
+`ZAI_API_KEY`. Polis uses `glm-5.2` by default; `ZAI_MODEL` can override the
+text model without a code change.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

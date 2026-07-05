@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-storage";
+import { fetchWithAiConsent } from "@/lib/ai-consent-client";
 import type {
   ValuesProfile,
   BallotInput,
@@ -220,7 +221,7 @@ export function useStreamingResearch(): UseStreamingResearchReturn {
       setError(null);
 
       try {
-        const response = await fetch("/api/research", {
+        const response = await fetchWithAiConsent("/api/research", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ valuesProfile, ballotInput }),

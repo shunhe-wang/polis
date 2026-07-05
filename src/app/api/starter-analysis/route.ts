@@ -8,9 +8,10 @@ import {
   enforceQuotaRules,
 } from "@/lib/ai-quotas";
 import {
+  isZaiConfigured,
   personalizeCandidateDossier,
   runCandidateDossierResearch,
-} from "@/lib/anthropic";
+} from "@/lib/zai";
 import { sanitizeCandidateResult } from "@/lib/research-text";
 import { buildStarterAnalysisHashes } from "@/lib/research-cache";
 import {
@@ -28,6 +29,11 @@ import { recordAppEvent } from "@/lib/observability";
 import { getAccountTrustStatus } from "@/lib/account-trust";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import { getSameOriginError } from "@/lib/csrf";
+import {
+  AI_CONSENT_REQUIRED_PAYLOAD,
+  AI_CONSENT_REQUIRED_STATUS,
+  userHasCurrentAiConsent,
+} from "@/lib/ai-consent";
 import {
   isValidCandidate,
   isValidCandidateDossier,
@@ -111,6 +117,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!(await userHasCurrentAiConsent(supabase, user.id))) {
+    return NextResponse.json(AI_CONSENT_REQUIRED_PAYLOAD, {
+      status: AI_CONSENT_REQUIRED_STATUS,
+    });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -125,9 +137,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isZaiConfigured()) {
     return NextResponse.json(
-      { error: "Anthropic API key is not configured" },
+      { error: "Z.AI API key is not configured" },
       { status: 500 }
     );
   }

@@ -19,6 +19,10 @@ export default function HomePage() {
   const [account, setAccount] = useState<AccountSummary>(
     DEFAULT_ACCOUNT_SUMMARY
   );
+  const [accountDeleted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("account") === "deleted";
+  });
   const [hasValuesDraft] = useState(() => {
     if (typeof window === "undefined") return false;
     return Boolean(
@@ -90,6 +94,11 @@ export default function HomePage() {
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-4 py-12 sm:px-6 sm:py-20">
+      {accountDeleted && (
+        <div className="mb-6 w-full max-w-6xl rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-100">
+          Your Polis account and user-linked app data were permanently deleted.
+        </div>
+      )}
       <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
         <section className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-black/5 bg-white/75 px-3 py-1 text-xs font-medium text-foreground/80 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-white/6">

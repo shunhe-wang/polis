@@ -19,6 +19,7 @@ import { safeSessionStorageGet, safeSessionStorageSet } from "@/lib/browser-stor
 import { syncFromSupabase } from "@/lib/persistence";
 import { buildRaceRecommendation } from "@/lib/race-recommendations";
 import { rankRaceCandidates } from "@/lib/race-recommendations";
+import { fetchWithAiConsent } from "@/lib/ai-consent-client";
 import type {
   ValuesProfile,
   BallotInput,
@@ -119,7 +120,7 @@ export default function GuidePage() {
 
       if (summary.isAuthenticated) {
         try {
-          const starterResponse = await fetch("/api/starter-analysis", {
+          const starterResponse = await fetchWithAiConsent("/api/starter-analysis", {
             cache: "no-store",
           });
           if (starterResponse.ok) {
@@ -333,7 +334,7 @@ export default function GuidePage() {
 
     const timeout = window.setTimeout(() => {
       prefetchedBallotKeysRef.current.add(ballotKey);
-      void fetch("/api/research/prefetch", {
+      void fetchWithAiConsent("/api/research/prefetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ballotInput }),
@@ -360,7 +361,7 @@ export default function GuidePage() {
       setAnalyzingCandidateId(candidate.id);
 
       try {
-        const response = await fetch("/api/starter-analysis", {
+        const response = await fetchWithAiConsent("/api/starter-analysis", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

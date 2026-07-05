@@ -64,7 +64,8 @@ Unless we expressly state otherwise at the time of purchase:
 - purchases are for the limited access or usage rights described in the Services;
 - passes and credits have no cash value, are not redeemable for cash, are non-transferable, and are not property;
 - passes and credits may be consumed when used to unlock or generate content or features;
-- unused passes and credits may expire or be forfeited upon account deletion, prolonged inactivity, or discontinuation of the relevant feature, subject to applicable law.
+- purchased credits do not expire while your account remains active; and
+- unused passes and credits are forfeited if you permanently delete your account, subject to applicable law.
 
 ### 4.2 Billing and Payment Processing
 

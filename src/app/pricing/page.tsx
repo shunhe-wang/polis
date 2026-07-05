@@ -71,12 +71,12 @@ export default function PricingPage() {
             Election Pass Credits
           </div>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-            Buy credits when you want the full guide.
+            Get a full ballot guide for $1.
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             Guest mode lets you browse ballots. Signed-in accounts can buy and
-            hold Election Pass credits, then spend 1 credit to unlock a ballot
-            when they are ready.
+            hold $1 Election Pass credits, then spend 1 credit to unlock a full
+            ballot guide when they are ready.
           </p>
           {account.isAuthenticated && (
             <p className="mt-4 text-sm text-muted-foreground">
@@ -184,10 +184,10 @@ export default function PricingPage() {
               ) : (
                 <div className="space-y-5">
                   <div>
-                    <h2 className="text-lg font-semibold">Buy 1 Election Pass credit</h2>
+                    <h2 className="text-lg font-semibold">Buy a $1 Election Pass</h2>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Purchase a single credit now. You can come back later and
-                      buy more as needed.
+                      Each $1 purchase adds one credit for one full ballot guide.
+                      You can come back later and buy more as needed.
                     </p>
                   </div>
                   <div className="rounded-2xl border border-black/5 bg-background/70 p-4 dark:border-white/10">
@@ -195,10 +195,10 @@ export default function PricingPage() {
                       <div>
                         <p className="font-medium text-foreground">Election Pass</p>
                         <p className="text-sm text-muted-foreground">
-                          Adds 1 ballot unlock credit to your account
+                          Adds 1 full-ballot guide credit to your account
                         </p>
                       </div>
-                      <p className="text-lg font-semibold">$9.99</p>
+                      <p className="text-lg font-semibold">$1.00</p>
                     </div>
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row">
