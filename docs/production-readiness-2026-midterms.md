@@ -22,13 +22,13 @@ The safest business path is to keep Stripe on the web and implement StoreKit pur
 
 `supabase/migrations/008_entitlement_billing.sql` gives authenticated users `insert` and `update` access to their own `account_entitlements` row. Because the policy does not restrict writable columns, a signed-in client can set `election_pass_credits` directly. Remove direct client insert/update policies and mutate entitlements only through narrowly granted, server-validated functions.
 
-**Implementation status (July 5):** migration `017_lock_down_entitlements_and_quotas.sql` removes these client-write policies and privileges. It still must be applied to the restored remote project; a live same-value update confirmed the old policy remains active there.
+**Implementation status (July 5):** complete. Migration `017_lock_down_entitlements_and_quotas.sql` is applied remotely. An authenticated adversarial test confirmed direct entitlement writes now fail with PostgreSQL `42501`.
 
 ### P0: users can reset their own AI quotas
 
 `supabase/migrations/004_ai_quotas.sql` gives authenticated users direct insert/update access to `ai_usage_counters`. A client can lower its usage state and bypass the intended limits. Remove direct writes and keep quota mutation behind the atomic RPC.
 
-**Implementation status (July 5):** migration `017` converts quota enforcement to a security-definer function and revokes direct table writes. Remote application is still pending for the same database-connectivity reason above.
+**Implementation status (July 5):** complete. Migration `017` converts quota enforcement to a security-definer function and revokes direct table writes. An authenticated adversarial test confirmed table writes fail with `42501` while the scoped quota RPC still succeeds.
 
 ### P0: no in-app account deletion
 
@@ -44,7 +44,7 @@ Polis sends issue priorities, free-text values, political identity, ballot conte
 
 Add a consent screen immediately before the first AI request. It should name Z.AI, summarize the transmitted data, link to the privacy policy, allow cancellation, and record the consent version and timestamp. Update the privacy policy for the actual Z.AI data flow and retention terms.
 
-**Implementation status (July 5):** the disclosure screen, consent API, current-version enforcement across every Z.AI route, revocation control, browser redirect, and privacy-policy update are complete. Migration `018_ai_data_consent.sql` creates the versioned ledger but is not yet applied to the restored remote project.
+**Implementation status (July 5):** complete. The disclosure screen, consent API, current-version enforcement across every Z.AI route, revocation control, browser redirect, and privacy-policy update are live. Migration `018_ai_data_consent.sql` is applied remotely, and a real browser test verified grant, revoke, and re-grant persistence.
 
 ### P0: vulnerable Next.js release
 
@@ -61,6 +61,8 @@ The repository pins `next@16.2.1`. The July 4 `npm audit` reports high-severity 
 ### P1: operational controls are still placeholders
 
 The admin dashboard reports zeroes and labels API usage as “Not yet wired.” Before launch, add provider cost/latency/error dashboards, Stripe/StoreKit fulfillment reconciliation, queue depth, quota denials, and election-data freshness. Configure external error reporting and alerts rather than relying only on database event logs.
+
+**Implementation status (July 5):** partially complete. The restricted dashboard now reports real user, saved-guide, research, Z.AI call/error/latency/token/cost, web revenue, unfulfilled-order, recorded quota-denial, and recent-error metrics. Live provider telemetry was verified through the candidate route. Cost estimates remain disabled until current model rates are configured. External error reporting, alert delivery, queue depth, election-data freshness, and StoreKit reconciliation remain outstanding.
 
 ## App Store decisions
 

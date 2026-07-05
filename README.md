@@ -20,6 +20,11 @@ Copy `.env.example` to `.env.local`, then add your Z.AI key as
 `ZAI_API_KEY`. Polis uses `glm-5.2` by default; `ZAI_MODEL` can override the
 text model without a code change.
 
+For admin cost estimates, set `ZAI_INPUT_USD_PER_MILLION`,
+`ZAI_OUTPUT_USD_PER_MILLION`, and `ZAI_WEB_SEARCH_USD_PER_USE` from Z.AI's
+current pricing page. Leave them unset rather than guessing when the configured
+model is not listed.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

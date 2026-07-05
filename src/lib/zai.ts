@@ -17,6 +17,7 @@ import {
   POLICY_SIGNAL_CHOICE_LABELS,
   POLICY_SIGNAL_LABELS,
 } from "./types";
+import { recordAppEvent } from "./observability";
 
 const DEFAULT_ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
 const DEFAULT_ZAI_MODEL = "glm-5.2";
@@ -82,17 +83,36 @@ async function postToZai<T>(
   signal?: AbortSignal
 ): Promise<T> {
   const { apiKey, baseUrl } = getZaiConfig();
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "Accept-Language": "en-US,en",
-    },
-    body: JSON.stringify(body),
-    cache: "no-store",
-    signal,
-  });
+  const startedAt = Date.now();
+  const model = typeof body.model === "string" ? body.model : "unknown";
+  let response: Response;
+
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Accept-Language": "en-US,en",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal,
+    });
+  } catch (error) {
+    await recordAppEvent({
+      category: "provider",
+      event: "zai_request_failed",
+      severity: "error",
+      details: {
+        path,
+        model,
+        durationMs: Date.now() - startedAt,
+        message: error instanceof Error ? error.message : "Network error",
+      },
+    });
+    throw error;
+  }
 
   const payload = (await response.json().catch(() => null)) as
     | (T & ZaiErrorResponse)
@@ -101,6 +121,18 @@ async function postToZai<T>(
   if (!response.ok) {
     const detail =
       payload?.error?.message || payload?.message || response.statusText;
+    await recordAppEvent({
+      category: "provider",
+      event: "zai_request_failed",
+      severity: "error",
+      details: {
+        path,
+        model,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        message: `Z.AI request failed with status ${response.status}`,
+      },
+    });
     throw new ZaiApiError(
       `Z.AI API request failed (${response.status})${detail ? `: ${detail}` : ""}`,
       response.status
@@ -108,8 +140,52 @@ async function postToZai<T>(
   }
 
   if (!payload) {
+    await recordAppEvent({
+      category: "provider",
+      event: "zai_request_failed",
+      severity: "error",
+      details: {
+        path,
+        model,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        message: "Z.AI API returned an empty response",
+      },
+    });
     throw new Error("Z.AI API returned an empty response");
   }
+
+  const usage = (payload as { usage?: Record<string, unknown> }).usage;
+  const webSearchUses =
+    Array.isArray(body.tools) &&
+    body.tools.some(
+      (tool) =>
+        tool &&
+        typeof tool === "object" &&
+        "type" in tool &&
+        tool.type === "web_search"
+    )
+      ? 1
+      : 0;
+  await recordAppEvent({
+    category: "provider",
+    event: "zai_request_succeeded",
+    details: {
+      path,
+      model,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      totalTokens:
+        typeof usage?.total_tokens === "number" ? usage.total_tokens : 0,
+      promptTokens:
+        typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : 0,
+      completionTokens:
+        typeof usage?.completion_tokens === "number"
+          ? usage.completion_tokens
+          : 0,
+      webSearchUses,
+    },
+  });
 
   return payload;
 }

@@ -4,6 +4,10 @@ import {
   parseBallotReviewDraftFile,
 } from "./zai";
 
+vi.mock("./observability", () => ({
+  recordAppEvent: () => Promise.resolve(),
+}));
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

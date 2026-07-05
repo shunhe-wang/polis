@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminEmail } from "@/lib/admin";
+import { loadAdminDashboardData } from "@/lib/admin-dashboard";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -53,16 +55,25 @@ export default async function AdminPage() {
     );
   }
 
-  const stats = {
-    totalUsers: 0,
-    activeGuides: 0,
-    researchRequests: 0,
-    proUsers: 0,
-  };
+  const admin = createAdminClient();
+  if (!admin) {
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-16">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Admin Data Unavailable</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            The Supabase service role is not configured.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  const dashboard = await loadAdminDashboardData(admin);
 
   return (
     <main className="flex flex-1 flex-col items-center px-4 py-8 sm:py-16">
-      <div className="w-full max-w-4xl">
+      <div className="w-full max-w-6xl">
         <div className="mb-8">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
@@ -73,50 +84,136 @@ export default async function AdminPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             Signed in as {user.email}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Operational totals below use the latest 24-hour window unless noted.
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard label="Total Users" value={stats.totalUsers} />
-          <StatCard label="Active Guides" value={stats.activeGuides} />
-          <StatCard label="Research Requests" value={stats.researchRequests} />
-          <StatCard label="Pro Users" value={stats.proUsers} />
+        {dashboard.warnings.length > 0 && (
+          <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+            <p className="font-medium">Some metrics could not be loaded.</p>
+            <ul className="mt-2 list-disc pl-5">
+              {dashboard.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard label="Total Users" value={dashboard.totalUsers} />
+          <StatCard label="Saved Guides" value={dashboard.activeGuides} />
+          <StatCard
+            label="Research Events (24h)"
+            value={dashboard.researchEvents24h}
+          />
+          <StatCard
+            label="Configured Pro Users"
+            value={dashboard.configuredProUsers}
+          />
         </div>
 
         <Separator className="my-8" />
 
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Organization Settings</h2>
-          <Card>
-            <CardContent className="py-6">
-              <div className="space-y-4 text-sm text-muted-foreground">
-                <StubRow label="Organization Name" value="Your Organization" />
-                <StubRow label="License Tier" value="Enterprise" />
-                <StubRow label="Seats Used" value="0 / 100" />
-                <StubRow label="API Usage" value="Not yet wired" />
-                <StubRow label="Billing" value="Not configured" />
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Z.AI Provider Health</h2>
+            <Badge
+              variant={dashboard.providerErrors24h > 0 ? "destructive" : "secondary"}
+            >
+              {dashboard.providerErrors24h > 0 ? "Needs attention" : "No recorded errors"}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <StatCard label="Provider Calls" value={dashboard.providerCalls24h} />
+            <StatCard label="Provider Errors" value={dashboard.providerErrors24h} />
+            <StatCard
+              label="Average Latency"
+              value={formatDuration(dashboard.averageProviderLatencyMs)}
+            />
+            <StatCard
+              label="Tokens Reported"
+              value={dashboard.providerTokens24h.toLocaleString()}
+            />
+            <StatCard
+              label="Estimated Cost"
+              value={formatProviderCost(
+                dashboard.estimatedProviderCostUsd24h
+              )}
+            />
+          </div>
         </section>
 
         <Separator className="my-8" />
 
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">User Management</h2>
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-sm text-muted-foreground">
-                User management will be available in a future release.
-              </p>
-            </CardContent>
-          </Card>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Billing and Quotas</h2>
+            <Badge
+              variant={dashboard.unfulfilledOrders > 0 ? "destructive" : "secondary"}
+            >
+              {dashboard.unfulfilledOrders > 0
+                ? `${dashboard.unfulfilledOrders} reconciliation issue${dashboard.unfulfilledOrders === 1 ? "" : "s"}`
+                : "Billing reconciled"}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatCard label="Paid Orders" value={dashboard.paidOrders24h} />
+            <StatCard
+              label="Gross Web Revenue"
+              value={formatUsd(dashboard.grossRevenueCents24h)}
+            />
+            <StatCard
+              label="Unfulfilled Orders"
+              value={dashboard.unfulfilledOrders}
+            />
+            <StatCard
+              label="Recorded Quota Denials"
+              value={dashboard.recordedQuotaDenials24h}
+            />
+          </div>
+        </section>
+
+        <Separator className="my-8" />
+
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">Recent Errors</h2>
+          {dashboard.recentErrors.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                No application or provider errors were recorded in the last 24 hours.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {dashboard.recentErrors.map((error) => (
+                <Card key={`${error.event}-${error.createdAt}`} size="sm">
+                  <CardContent className="flex flex-col gap-2 py-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-medium">{error.message}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {error.event.replaceAll("_", " ")}
+                        {error.route ? ` • ${error.route}` : ""}
+                      </p>
+                    </div>
+                    <time
+                      className="text-xs text-muted-foreground"
+                      dateTime={error.createdAt}
+                    >
+                      {formatTimestamp(error.createdAt)}
+                    </time>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </main>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <Card>
       <CardContent className="pt-4 text-center">
@@ -127,11 +224,33 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function StubRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="font-medium text-foreground">{label}</span>
-      <span>{value}</span>
-    </div>
-  );
+function formatUsd(cents: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+
+function formatDuration(milliseconds: number | null): string {
+  if (milliseconds === null) return "No data";
+  if (milliseconds < 1000) return `${milliseconds} ms`;
+  return `${(milliseconds / 1000).toFixed(1)} s`;
+}
+
+function formatProviderCost(value: number | null): string {
+  if (value === null) return "Set rates";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: value < 0.01 ? 4 : 2,
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
+function formatTimestamp(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/New_York",
+  }).format(new Date(value));
 }
