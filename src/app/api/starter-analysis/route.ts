@@ -12,7 +12,10 @@ import {
   personalizeCandidateDossier,
   runCandidateDossierResearch,
 } from "@/lib/zai";
-import { sanitizeCandidateResult } from "@/lib/research-text";
+import {
+  sanitizeCandidateDossier,
+  sanitizeCandidateResult,
+} from "@/lib/research-text";
 import { buildStarterAnalysisHashes } from "@/lib/research-cache";
 import {
   buildCandidateDossierKey,
@@ -202,8 +205,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const quotaFailure = await enforceStarterAnalysisQuota(supabase);
-    if (quotaFailure) {
+    // Check remaining without consuming yet. The free starter analysis is only
+    // reserved after a valid result is produced (see below), so a failed AI
+    // call never burns the user's single free analysis.
+    const remainingBefore = await getStarterAnalysisRemaining(supabase);
+    if (remainingBefore <= 0) {
       await recordAppEvent({
         category: "research",
         event: "starter_quota_reached",
@@ -269,7 +275,16 @@ export async function POST(request: NextRequest) {
       : null;
 
     if (!dossier || !isValidCandidateDossier(dossier)) {
-      dossier = await runCandidateDossierResearch(researchRequest);
+      dossier = sanitizeCandidateDossier(
+        await runCandidateDossierResearch(researchRequest)
+      );
+      if (!isValidCandidateDossier(dossier)) {
+        // One retry: GLM occasionally returns a structurally-off dossier. A
+        // single retry recovers most transient cases before we give up.
+        dossier = sanitizeCandidateDossier(
+          await runCandidateDossierResearch(researchRequest)
+        );
+      }
       if (!isValidCandidateDossier(dossier)) {
         await recordAppEvent({
           category: "research",
@@ -300,25 +315,45 @@ export async function POST(request: NextRequest) {
     const cachedPersonalized = admin
       ? await loadCandidatePersonalizationCache(admin, personalizationKey)
       : null;
-    const result =
+
+    const sanitizePersonalized = (result: CandidateResult) =>
+      sanitizeCandidateResult({ ...result, candidateId: body.candidate.id });
+
+    let sanitizedResult =
       cachedPersonalized && isValidCandidateResult(cachedPersonalized)
-        ? cachedPersonalized
-        : await personalizeCandidateDossier(
-            researchRequest,
-            dossier,
-            "starter"
+        ? sanitizePersonalized(cachedPersonalized)
+        : sanitizePersonalized(
+            await personalizeCandidateDossier(
+              researchRequest,
+              dossier,
+              "starter"
+            )
           );
 
-    const sanitizedResult = sanitizeCandidateResult({
-      ...result,
-      candidateId: body.candidate.id,
-    });
+    if (!isValidCandidateResult(sanitizedResult)) {
+      // One retry for transient malformed personalization output.
+      sanitizedResult = sanitizePersonalized(
+        await personalizeCandidateDossier(researchRequest, dossier, "starter")
+      );
+    }
 
     if (!isValidCandidateResult(sanitizedResult)) {
       return NextResponse.json(
         { error: "Starter analysis returned an invalid result" },
         { status: 502 }
       );
+    }
+
+    // Reserve the free starter analysis only now that a valid result exists, so
+    // a failed or invalid AI response never consumes the user's single free
+    // analysis. Best-effort: the starter_candidate_analyses upsert below is the
+    // durable per-account gate, so a reservation hiccup must not discard a valid
+    // result. If a concurrent request already reserved it, the account simply
+    // shows 0 remaining.
+    try {
+      await enforceStarterAnalysisQuota(supabase);
+    } catch {
+      // Ignore reservation errors; the persisted analysis row gates re-runs.
     }
 
     const starterAnalysesRemaining =

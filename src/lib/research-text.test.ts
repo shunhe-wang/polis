@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  sanitizeCandidateDossier,
   sanitizeCandidateResult,
   sanitizeMeasureResult,
   sanitizeResearchText,
 } from "@/lib/research-text";
+import { isValidCandidateDossier } from "@/lib/validation";
 
 describe("research text sanitization", () => {
   it("removes cite tags and inline citation markers", () => {
@@ -53,6 +55,70 @@ describe("research text sanitization", () => {
     expect(result.issueBreakdown[0].candidatePosition).toBe(
       "Backs zoning reform."
     );
+  });
+
+  it("drops candidate likes and concerns that lack a usable source", () => {
+    const result = sanitizeCandidateResult({
+      candidateId: "cand-1",
+      name: "Jane Doe",
+      party: null,
+      race: "Mayor",
+      alignmentScore: 50,
+      issueBreakdown: [],
+      likes: [
+        {
+          text: "Sourced strength.",
+          sourceUrl: "https://example.com",
+          sourceTitle: "Example",
+        },
+        { text: "No source here.", sourceUrl: "", sourceTitle: "" },
+      ],
+      concerns: [
+        { text: "Missing source.", sourceUrl: "  ", sourceTitle: "Anon" },
+      ],
+      confidence: "low",
+      reasoning: "Limited information available.",
+    });
+
+    expect(result.likes).toHaveLength(1);
+    expect(result.likes[0].text).toBe("Sourced strength.");
+    expect(result.concerns).toHaveLength(0);
+  });
+
+  it("salvages a thin-source dossier into a valid one instead of failing", () => {
+    const sanitized = sanitizeCandidateDossier({
+      name: "Robert Steadman",
+      party: "Republican",
+      race: "US Senate - DC",
+      state: "DC",
+      overview: "No credible information was found for this candidate.",
+      issueEvidence: [
+        {
+          issue: "economy",
+          summary: "No information found.",
+          stance: "Unknown - no available evidence",
+        },
+      ],
+      strengths: [
+        {
+          text: "No verifiable strengths could be identified.",
+          sourceUrl: "",
+          sourceTitle: "No sources available",
+        },
+      ],
+      concerns: [
+        {
+          text: "A real sourced concern.",
+          sourceUrl: "https://example.gov",
+          sourceTitle: "Gov source",
+        },
+      ],
+      confidence: "low",
+    });
+
+    expect(sanitized.strengths).toHaveLength(0);
+    expect(sanitized.concerns).toHaveLength(1);
+    expect(isValidCandidateDossier(sanitized)).toBe(true);
   });
 
   it("sanitizes measure summaries and analysis", () => {

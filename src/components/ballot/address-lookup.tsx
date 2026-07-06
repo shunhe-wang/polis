@@ -15,7 +15,7 @@ interface AddressLookupValue {
 interface AddressLookupProps {
   value: AddressLookupValue;
   onChange: (value: AddressLookupValue) => void;
-  onLookup: (address: string, stateHint?: string) => void;
+  onLookup: (address: string, electionId?: string, stateHint?: string) => void;
   isLoading: boolean;
 }
 
@@ -192,7 +192,7 @@ export function AddressLookup({
     event.preventDefault();
     const address = buildLookupAddress();
     if (address) {
-      onLookup(address, hasValidState ? normalizedState : undefined);
+      onLookup(address, undefined, hasValidState ? normalizedState : undefined);
     }
   };
 

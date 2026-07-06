@@ -562,8 +562,8 @@ export default function BallotPage() {
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 {account.starterAnalysesRemaining > 0 && (
                   <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
-                    {account.starterAnalysesRemaining} starter analysis
-                    {account.starterAnalysesRemaining === 1 ? "" : "es"}
+                    {account.starterAnalysesRemaining} starter analys
+                    {account.starterAnalysesRemaining === 1 ? "is" : "es"}
                   </span>
                 )}
                 {account.electionPassCredits > 0 && (

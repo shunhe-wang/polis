@@ -48,7 +48,7 @@ export function FreeGuideBrowser({
     ? trustReason ??
       "Verify your email with a real inbox before starter analysis or credit purchases will work."
     : starterAnalysesRemaining > 0
-      ? `Browse your ballot, open source links, and use ${starterAnalysesRemaining} starter analysis${starterAnalysesRemaining === 1 ? "" : "es"} on the candidate you care about most.`
+      ? `Browse your ballot, open source links, and use ${starterAnalysesRemaining} starter analys${starterAnalysesRemaining === 1 ? "is" : "es"} on the candidate you care about most.`
       : "Browse your ballot and open source links. Your starter analysis has already been used on this account.";
 
   return (
@@ -71,8 +71,8 @@ export function FreeGuideBrowser({
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
-                {starterAnalysesRemaining} starter analysis
-                {starterAnalysesRemaining === 1 ? "" : "es"}
+                {starterAnalysesRemaining} starter analys
+                {starterAnalysesRemaining === 1 ? "is" : "es"}
               </span>
               <span className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">
                 {electionPassCredits} credit{electionPassCredits === 1 ? "" : "s"}

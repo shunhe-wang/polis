@@ -1,7 +1,9 @@
 import type {
+  CandidateDossier,
   CandidateResult,
   CitedClaim,
   IssueAlignment,
+  MeasureDossier,
   MeasureResult,
   RaceRecommendation,
 } from "@/lib/types";
@@ -27,6 +29,26 @@ function sanitizeCitedClaim(claim: CitedClaim): CitedClaim {
   };
 }
 
+function hasUsableSource(claim: CitedClaim): boolean {
+  return (
+    typeof claim.text === "string" &&
+    claim.text.trim().length > 0 &&
+    typeof claim.sourceUrl === "string" &&
+    claim.sourceUrl.trim().length > 0 &&
+    typeof claim.sourceTitle === "string" &&
+    claim.sourceTitle.trim().length > 0
+  );
+}
+
+// Sanitize claims and drop any that lack a usable source. The AI honestly
+// returns source-less claims for candidates and measures with thin public
+// coverage; keeping them would fail cited-claim validation and reject the whole
+// (otherwise useful) dossier or result. Dropping them yields a valid, honestly
+// source-light payload instead of a hard failure.
+function sanitizeCitedClaims(claims: CitedClaim[]): CitedClaim[] {
+  return claims.map(sanitizeCitedClaim).filter(hasUsableSource);
+}
+
 function sanitizeIssueAlignment(alignment: IssueAlignment): IssueAlignment {
   return {
     ...alignment,
@@ -44,8 +66,24 @@ export function sanitizeCandidateResult(
     race: sanitizeResearchText(result.race),
     reasoning: sanitizeResearchText(result.reasoning),
     issueBreakdown: result.issueBreakdown.map(sanitizeIssueAlignment),
-    likes: result.likes.map(sanitizeCitedClaim),
-    concerns: result.concerns.map(sanitizeCitedClaim),
+    likes: sanitizeCitedClaims(result.likes),
+    concerns: sanitizeCitedClaims(result.concerns),
+  };
+}
+
+export function sanitizeCandidateDossier(
+  dossier: CandidateDossier
+): CandidateDossier {
+  return {
+    ...dossier,
+    overview: sanitizeResearchText(dossier.overview),
+    issueEvidence: dossier.issueEvidence.map((note) => ({
+      ...note,
+      summary: sanitizeResearchText(note.summary),
+      stance: sanitizeResearchText(note.stance),
+    })),
+    strengths: sanitizeCitedClaims(dossier.strengths),
+    concerns: sanitizeCitedClaims(dossier.concerns),
   };
 }
 
@@ -55,8 +93,22 @@ export function sanitizeMeasureResult(result: MeasureResult): MeasureResult {
     title: sanitizeResearchText(result.title),
     summary: sanitizeResearchText(result.summary),
     reasoning: sanitizeResearchText(result.reasoning),
-    prosForVoter: result.prosForVoter.map(sanitizeCitedClaim),
-    consForVoter: result.consForVoter.map(sanitizeCitedClaim),
+    prosForVoter: sanitizeCitedClaims(result.prosForVoter),
+    consForVoter: sanitizeCitedClaims(result.consForVoter),
+  };
+}
+
+export function sanitizeMeasureDossier(dossier: MeasureDossier): MeasureDossier {
+  return {
+    ...dossier,
+    summary: sanitizeResearchText(dossier.summary),
+    yesCase: sanitizeCitedClaims(dossier.yesCase),
+    noCase: sanitizeCitedClaims(dossier.noCase),
+    issueEvidence: dossier.issueEvidence.map((note) => ({
+      ...note,
+      summary: sanitizeResearchText(note.summary),
+      stance: sanitizeResearchText(note.stance),
+    })),
   };
 }
 

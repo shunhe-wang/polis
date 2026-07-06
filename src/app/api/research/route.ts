@@ -33,7 +33,9 @@ import {
   isValidValuesProfile,
 } from "@/lib/validation";
 import {
+  sanitizeCandidateDossier,
   sanitizeCandidateResult,
+  sanitizeMeasureDossier,
   sanitizeMeasureResult,
 } from "@/lib/research-text";
 import {
@@ -129,7 +131,9 @@ async function getCandidateDossier(
     }
   }
 
-  const dossier = await runCandidateDossierResearch(req);
+  const dossier = sanitizeCandidateDossier(
+    await runCandidateDossierResearch(req)
+  );
   if (!isValidCandidateDossier(dossier)) {
     throw new Error("Candidate dossier returned an invalid result");
   }
@@ -162,7 +166,7 @@ async function getMeasureDossier(
     }
   }
 
-  const dossier = await runMeasureDossierResearch(req);
+  const dossier = sanitizeMeasureDossier(await runMeasureDossierResearch(req));
   if (!isValidMeasureDossier(dossier)) {
     throw new Error("Measure dossier returned an invalid result");
   }
