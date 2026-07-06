@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { Race, Candidate } from "@/lib/types";
 import { formatPartyInline } from "@/lib/party-format";
+import { fetchWithAiConsent } from "@/lib/ai-consent-client";
 
 interface RaceEditorProps {
   races: Race[];
@@ -164,7 +165,7 @@ export function RaceEditor({
     setLookingUp(raceId);
     setLookupMessage(null);
     try {
-      const res = await fetch("/api/candidates", {
+      const res = await fetchWithAiConsent("/api/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/election-data-freshness",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import {
   enforceQuotaRules,
@@ -13,8 +12,12 @@ import {
   isDeterministicOfficeLookup,
 } from "@/lib/deterministic-candidate-lookup";
 import { getSameOriginError } from "@/lib/csrf";
-
-const anthropic = new Anthropic();
+import { isZaiConfigured, lookupCandidatesWithZai } from "@/lib/zai";
+import {
+  AI_CONSENT_REQUIRED_PAYLOAD,
+  AI_CONSENT_REQUIRED_STATUS,
+  userHasCurrentAiConsent,
+} from "@/lib/ai-consent";
 
 interface CandidateLookupResult {
   candidates: Array<{ name: string; party: string | null }>;
@@ -138,6 +141,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
+    if (!(await userHasCurrentAiConsent(supabase, user.id))) {
+      return NextResponse.json(AI_CONSENT_REQUIRED_PAYLOAD, {
+        status: AI_CONSENT_REQUIRED_STATUS,
+      });
+    }
+
+    if (!isZaiConfigured()) {
+      return NextResponse.json(
+        { error: "Z.AI API key is not configured", candidates: [] },
+        { status: 500 }
+      );
+    }
+
     const quotaRules = getCandidateLookupQuotaRules();
     const quotaFailure = await enforceQuotaRules(
       supabase,
@@ -178,55 +194,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const timeout = setTimeout(() => controller.abort(), 30_000);
 
     try {
-      const response = await anthropic.messages.create(
-        {
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 512,
-          tools: [
-            {
-              type: "web_search_20250305" as const,
-              name: "web_search" as const,
-              max_uses: 2,
-            },
-          ],
-          messages: [
-            {
-              role: "user",
-              content: `List candidates for "${raceName}" in ${state}${locality ? `, ${locality}` : ""}. Restrict the search to the relevant election for that jurisdiction only. Search the web, then reply with ONLY a JSON array: [{"name":"...","party":"..."}]. Empty array if unknown.`,
-            },
-          ],
-        },
-        { signal: controller.signal }
-      );
-
-      // Extract text from response
-      let text = "";
-      for (const block of response.content) {
-        if (block.type === "text") {
-          text += block.text;
-        }
-      }
-
-      // Parse the JSON array from the response
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        return NextResponse.json({
-          candidates: [],
-          error: null,
-        } satisfies CandidateLookupResult);
-      }
-
-      const parsed = JSON.parse(jsonMatch[0]) as Array<{
-        name: string;
-        party?: string | null;
-      }>;
-
-      const candidates = parsed
-        .filter((c) => c && typeof c.name === "string" && c.name.trim())
-        .map((c) => ({
-          name: c.name.trim(),
-          party: c.party?.trim() || null,
-        }));
+      const candidates = await lookupCandidatesWithZai({
+        raceName,
+        state,
+        locality,
+        signal: controller.signal,
+      });
 
       return NextResponse.json({
         candidates,

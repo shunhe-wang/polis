@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   getCandidateLookupQuotaRules,
   getMaxResearchItems,
+  getPrefetchQuotaRules,
   getQuotaWindowStart,
   getResearchQuotaRules,
   getRetryAfterSeconds,
@@ -36,12 +37,16 @@ describe("ai quota helpers", () => {
     process.env.CANDIDATE_LOOKUPS_PER_DAY = "40";
     process.env.MAX_RESEARCH_ITEMS_PER_REQUEST = "9";
     process.env.FREE_STARTER_ANALYSES = "2";
+    process.env.PREFETCH_ITEMS_PER_10M = "4";
+    process.env.PREFETCH_ITEMS_PER_DAY = "12";
 
     expect(getResearchQuotaRules(4)[0].maxUnits).toBe(5);
     expect(getResearchQuotaRules(4)[1].maxUnits).toBe(80);
     expect(getCandidateLookupQuotaRules()[1].maxUnits).toBe(40);
     expect(getMaxResearchItems()).toBe(9);
     expect(getStarterAnalysisLimit()).toBe(2);
+    expect(getPrefetchQuotaRules()[0].maxUnits).toBe(4);
+    expect(getPrefetchQuotaRules()[1].maxUnits).toBe(12);
     expect(getStarterAnalysisWindowStart().toISOString()).toBe(
       "2026-01-01T00:00:00.000Z"
     );

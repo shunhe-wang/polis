@@ -7,12 +7,18 @@ import {
   getBallotParseQuotaRules,
 } from "@/lib/ai-quotas";
 import {
+  isZaiConfigured,
   parseBallotReviewDraft,
   parseBallotReviewDraftFile,
-} from "@/lib/anthropic";
+} from "@/lib/zai";
 import { buildScopedIpQuotaRules } from "@/lib/request-identity";
 import { isValidBallotReviewDraft } from "@/lib/validation";
 import { getSameOriginError } from "@/lib/csrf";
+import {
+  AI_CONSENT_REQUIRED_PAYLOAD,
+  AI_CONSENT_REQUIRED_STATUS,
+  userHasCurrentAiConsent,
+} from "@/lib/ai-consent";
 import {
   getBallotDraftImportMessage,
   getFriendlyBallotDraftParseError,
@@ -57,13 +63,11 @@ function isValidBody(body: unknown): body is ReviewDraftBody {
 function isSupportedUploadType(mediaType: string): mediaType is
   | "application/pdf"
   | "image/png"
-  | "image/jpeg"
-  | "image/webp" {
+  | "image/jpeg" {
   return (
     mediaType === "application/pdf" ||
     mediaType === "image/png" ||
-    mediaType === "image/jpeg" ||
-    mediaType === "image/webp"
+    mediaType === "image/jpeg"
   );
 }
 
@@ -169,12 +173,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!(await userHasCurrentAiConsent(supabase, user.id))) {
+    return NextResponse.json(AI_CONSENT_REQUIRED_PAYLOAD, {
+      status: AI_CONSENT_REQUIRED_STATUS,
+    });
+  }
+
   const contentType = request.headers.get("content-type") ?? "";
   let body: ReviewDraftBody | null = null;
   let uploadFile:
     | {
         fileName: string;
-        mediaType: "application/pdf" | "image/png" | "image/jpeg" | "image/webp";
+        mediaType: "application/pdf" | "image/png" | "image/jpeg";
         bytes: Uint8Array;
       }
     | null = null;
@@ -193,7 +203,7 @@ export async function POST(request: NextRequest) {
 
     if (!isSupportedUploadType(file.type)) {
       return NextResponse.json(
-        { error: "Upload a PDF, PNG, JPEG, or WEBP ballot file." },
+        { error: "Upload a PDF, PNG, or JPEG ballot file." },
         { status: 400 }
       );
     }
@@ -230,9 +240,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isZaiConfigured()) {
     return NextResponse.json(
-      { error: "Anthropic API key is not configured" },
+      { error: "Z.AI API key is not configured" },
       { status: 500 }
     );
   }

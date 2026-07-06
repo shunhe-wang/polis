@@ -82,9 +82,10 @@ test("pricing shows guest/auth options when logged out", async ({ page }) => {
 
   await page.goto("/pricing");
 
-  await expect(page.getByRole("button", { name: "Continue as Guest" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create Account" })).toBeVisible();
+  const main = page.getByRole("main");
+  await expect(main.getByRole("button", { name: "Continue as Guest" })).toBeVisible();
+  await expect(main.getByRole("button", { name: "Sign In" })).toBeVisible();
+  await expect(main.getByRole("button", { name: "Create Account" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Buy Election Pass" })).toHaveCount(0);
 });
 
@@ -102,6 +103,7 @@ test("pricing shows buy CTA for signed-in accounts with zero credits", async ({ 
   await page.goto("/pricing");
 
   await expect(page.getByText("Account balance:")).toBeVisible();
+  await expect(page.getByText("$1.00", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Buy Election Pass" })).toBeVisible();
 });
 

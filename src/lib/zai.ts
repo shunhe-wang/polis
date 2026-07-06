@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type {
   BallotReviewDraft,
   ValuesProfile,
@@ -18,8 +17,234 @@ import {
   POLICY_SIGNAL_CHOICE_LABELS,
   POLICY_SIGNAL_LABELS,
 } from "./types";
+import { recordAppEvent } from "./observability";
 
-const anthropic = new Anthropic();
+const DEFAULT_ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
+const DEFAULT_ZAI_MODEL = "glm-5.2";
+
+type ZaiMessage =
+  | { role: "system"; content: string }
+  | { role: "user"; content: string };
+
+interface ZaiChatCompletionResponse {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+    };
+  }>;
+}
+
+interface ZaiLayoutParsingResponse {
+  md_results?: string;
+}
+
+interface ZaiErrorResponse {
+  error?: { message?: string };
+  message?: string;
+}
+
+class ZaiApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "ZaiApiError";
+  }
+}
+
+function getZaiConfig(): {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+} {
+  const apiKey = process.env.ZAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("Z.AI API key is not configured");
+  }
+
+  return {
+    apiKey,
+    baseUrl: (process.env.ZAI_BASE_URL?.trim() || DEFAULT_ZAI_BASE_URL).replace(
+      /\/+$/,
+      ""
+    ),
+    model: process.env.ZAI_MODEL?.trim() || DEFAULT_ZAI_MODEL,
+  };
+}
+
+export function isZaiConfigured(): boolean {
+  return Boolean(process.env.ZAI_API_KEY?.trim());
+}
+
+async function postToZai<T>(
+  path: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<T> {
+  const { apiKey, baseUrl } = getZaiConfig();
+  const startedAt = Date.now();
+  const model = typeof body.model === "string" ? body.model : "unknown";
+  let response: Response;
+
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Accept-Language": "en-US,en",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal,
+    });
+  } catch (error) {
+    await recordAppEvent({
+      category: "provider",
+      event: "zai_request_failed",
+      severity: "error",
+      details: {
+        path,
+        model,
+        durationMs: Date.now() - startedAt,
+        message: error instanceof Error ? error.message : "Network error",
+      },
+    });
+    throw error;
+  }
+
+  const payload = (await response.json().catch(() => null)) as
+    | (T & ZaiErrorResponse)
+    | null;
+
+  if (!response.ok) {
+    const detail =
+      payload?.error?.message || payload?.message || response.statusText;
+    await recordAppEvent({
+      category: "provider",
+      event: "zai_request_failed",
+      severity: "error",
+      details: {
+        path,
+        model,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        message: `Z.AI request failed with status ${response.status}`,
+      },
+    });
+    throw new ZaiApiError(
+      `Z.AI API request failed (${response.status})${detail ? `: ${detail}` : ""}`,
+      response.status
+    );
+  }
+
+  if (!payload) {
+    await recordAppEvent({
+      category: "provider",
+      event: "zai_request_failed",
+      severity: "error",
+      details: {
+        path,
+        model,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        message: "Z.AI API returned an empty response",
+      },
+    });
+    throw new Error("Z.AI API returned an empty response");
+  }
+
+  const usage = (payload as { usage?: Record<string, unknown> }).usage;
+  const webSearchUses =
+    Array.isArray(body.tools) &&
+    body.tools.some(
+      (tool) =>
+        tool &&
+        typeof tool === "object" &&
+        "type" in tool &&
+        tool.type === "web_search"
+    )
+      ? 1
+      : 0;
+  await recordAppEvent({
+    category: "provider",
+    event: "zai_request_succeeded",
+    details: {
+      path,
+      model,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      totalTokens:
+        typeof usage?.total_tokens === "number" ? usage.total_tokens : 0,
+      promptTokens:
+        typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : 0,
+      completionTokens:
+        typeof usage?.completion_tokens === "number"
+          ? usage.completion_tokens
+          : 0,
+      webSearchUses,
+    },
+  });
+
+  return payload;
+}
+
+async function createZaiCompletion(options: {
+  messages: ZaiMessage[];
+  maxTokens: number;
+  webSearchResultCount?: number;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { model } = getZaiConfig();
+  const response = await postToZai<ZaiChatCompletionResponse>(
+    "/chat/completions",
+    {
+      model,
+      messages: options.messages,
+      max_tokens: options.maxTokens,
+      temperature: 0.2,
+      thinking: { type: "enabled" },
+      response_format: { type: "json_object" },
+      tools: options.webSearchResultCount
+        ? [
+            {
+              type: "web_search",
+              web_search: {
+                enable: true,
+                search_engine: "search_pro_jina",
+                count: options.webSearchResultCount,
+                content_size: "high",
+                search_result: true,
+                require_search: true,
+              },
+            },
+          ]
+        : undefined,
+    },
+    options.signal
+  );
+
+  const content = response.choices?.[0]?.message?.content?.trim();
+  if (!content) {
+    throw new Error("Z.AI API returned no response content");
+  }
+
+  return content;
+}
+
+function parseJsonObject<T>(responseText: string, parseError: string): T {
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error(parseError);
+  }
+
+  try {
+    return JSON.parse(jsonMatch[0]) as T;
+  } catch {
+    throw new Error(parseError);
+  }
+}
 
 const SYSTEM_PROMPT = `You are a non-partisan political research assistant. Your job is to research candidates running for office and evaluate how well their positions align with a voter's stated values and priorities.
 
@@ -427,88 +652,30 @@ Include all 9 issues in issueEvidence, using unknown/indirect language when the 
 }
 
 async function runJsonCompletion<T>(options: {
-  model: string;
   maxTokens: number;
   prompt: string;
-  webSearchMaxUses?: number;
+  webSearchResultCount?: number;
   parseError: string;
 }): Promise<T> {
-  const response = await anthropic.messages.create({
-    model: options.model,
-    max_tokens: options.maxTokens,
-    system: SYSTEM_PROMPT,
-    tools: options.webSearchMaxUses
-      ? [
-          {
-            type: "web_search_20250305" as const,
-            name: "web_search" as const,
-            max_uses: options.webSearchMaxUses,
-          },
-        ]
-      : undefined,
-    messages: [{ role: "user", content: options.prompt }],
-  });
-
-  let responseText = "";
-  for (const block of response.content) {
-    if (block.type === "text") {
-      responseText += block.text;
-    }
-  }
-
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error(options.parseError);
-  }
-
-  return JSON.parse(jsonMatch[0]) as T;
-}
-
-async function runJsonCompletionWithContent<T>(options: {
-  model: string;
-  maxTokens: number;
-  prompt: string;
-  content: Array<Record<string, unknown>>;
-  parseError: string;
-}): Promise<T> {
-  const response = await anthropic.messages.create({
-    model: options.model,
-    max_tokens: options.maxTokens,
-    system: SYSTEM_PROMPT,
+  const responseText = await createZaiCompletion({
+    maxTokens: options.maxTokens,
+    webSearchResultCount: options.webSearchResultCount,
     messages: [
-      {
-        role: "user",
-        content: [
-          ...options.content,
-          { type: "text", text: options.prompt },
-        ] as never,
-      },
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: options.prompt },
     ],
   });
 
-  let responseText = "";
-  for (const block of response.content) {
-    if (block.type === "text") {
-      responseText += block.text;
-    }
-  }
-
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error(options.parseError);
-  }
-
-  return JSON.parse(jsonMatch[0]) as T;
+  return parseJsonObject<T>(responseText, options.parseError);
 }
 
 export function runCandidateDossierResearch(
   req: ResearchRequest
 ): Promise<CandidateDossier> {
   return runJsonCompletion<CandidateDossier>({
-    model: "claude-haiku-4-5-20251001",
     maxTokens: 2600,
     prompt: buildCandidateDossierPrompt(req.candidate, req.race, req.state),
-    webSearchMaxUses: 2,
+    webSearchResultCount: 10,
     parseError: "Could not parse candidate dossier",
   });
 }
@@ -519,7 +686,6 @@ export function personalizeCandidateDossier(
   mode: "full" | "starter" = "full"
 ): Promise<CandidateResult> {
   return runJsonCompletion<CandidateResult>({
-    model: "claude-haiku-4-5-20251001",
     maxTokens: mode === "starter" ? 1800 : 2600,
     prompt: buildUserPrompt(
       req.candidate,
@@ -540,10 +706,9 @@ export function runMeasureDossierResearch(
   req: MeasureResearchRequest
 ): Promise<MeasureDossier> {
   return runJsonCompletion<MeasureDossier>({
-    model: "claude-haiku-4-5-20251001",
     maxTokens: 2600,
     prompt: buildMeasureDossierPrompt(req.measure, req.state),
-    webSearchMaxUses: 2,
+    webSearchResultCount: 10,
     parseError: "Could not parse measure dossier",
   });
 }
@@ -553,7 +718,6 @@ export function personalizeMeasureDossier(
   dossier: MeasureDossier
 ): Promise<MeasureResult> {
   return runJsonCompletion<MeasureResult>({
-    model: "claude-haiku-4-5-20251001",
     maxTokens: 2200,
     prompt: buildMeasurePrompt(req.measure, req.state, req.profile, dossier),
     parseError: "Could not parse personalized measure research",
@@ -565,46 +729,84 @@ export function parseBallotReviewDraft(input: {
   state: string | null;
 }): Promise<BallotReviewDraft> {
   return runJsonCompletion<BallotReviewDraft>({
-    model: "claude-haiku-4-5-20251001",
     maxTokens: 2400,
     prompt: buildBallotTextParsePrompt(input),
     parseError: "Could not parse ballot review draft",
   });
 }
 
-export function parseBallotReviewDraftFile(input: {
+export async function parseBallotReviewDraftFile(input: {
   fileName: string;
-  mediaType: "application/pdf" | "image/png" | "image/jpeg" | "image/webp";
+  mediaType: "application/pdf" | "image/png" | "image/jpeg";
   base64Data: string;
   state: string | null;
 }): Promise<BallotReviewDraft> {
-  const attachment =
-    input.mediaType === "application/pdf"
-      ? {
-          type: "document",
-          source: {
-            type: "base64",
-            media_type: input.mediaType,
-            data: input.base64Data,
-          },
-        }
-      : {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: input.mediaType,
-            data: input.base64Data,
-          },
-        };
+  const extracted = await postToZai<ZaiLayoutParsingResponse>(
+    "/layout_parsing",
+    {
+      model: "glm-ocr",
+      file: `data:${input.mediaType};base64,${input.base64Data}`,
+      return_crop_images: false,
+      need_layout_visualization: false,
+    }
+  );
+  const extractedText = extracted.md_results?.trim();
+  if (!extractedText) {
+    throw new Error("Z.AI OCR could not extract text from the ballot upload");
+  }
 
-  return runJsonCompletionWithContent<BallotReviewDraft>({
-    model: "claude-haiku-4-5-20251001",
+  return runJsonCompletion<BallotReviewDraft>({
     maxTokens: 3200,
-    prompt: buildBallotFileParsePrompt({
+    prompt: `${buildBallotFileParsePrompt({
       state: input.state,
       fileName: input.fileName,
-    }),
-    content: [attachment],
+    })}\n\n## Extracted file content\n${extractedText}`,
     parseError: "Could not parse uploaded ballot draft",
+  });
+}
+
+export async function lookupCandidatesWithZai(input: {
+  raceName: string;
+  state: string;
+  locality: string;
+  signal?: AbortSignal;
+}): Promise<Array<{ name: string; party: string | null }>> {
+  const responseText = await createZaiCompletion({
+    maxTokens: 1800,
+    webSearchResultCount: 10,
+    signal: input.signal,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You identify election candidates from current, authoritative sources. Return only valid JSON and do not guess.",
+      },
+      {
+        role: "user",
+        content: `List candidates for "${input.raceName}" in ${input.state}${input.locality ? `, ${input.locality}` : ""}. Restrict the search to the relevant election for that jurisdiction only. Return this exact shape: {"candidates":[{"name":"...","party":"..."}]}. Use an empty candidates array if unknown.`,
+      },
+    ],
+  });
+  const parsed = parseJsonObject<{
+    candidates?: Array<{ name?: unknown; party?: unknown }>;
+  }>(responseText, "Could not parse candidate lookup results");
+
+  if (!Array.isArray(parsed.candidates)) {
+    return [];
+  }
+
+  return parsed.candidates.flatMap((candidate) => {
+    if (typeof candidate?.name !== "string" || !candidate.name.trim()) {
+      return [];
+    }
+    return [
+      {
+        name: candidate.name.trim(),
+        party:
+          typeof candidate.party === "string" && candidate.party.trim()
+            ? candidate.party.trim()
+            : null,
+      },
+    ];
   });
 }
