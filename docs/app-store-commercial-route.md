@@ -25,6 +25,8 @@ Set these variables in the Vercel environment that hosts the API:
 - `APPLE_IAP_ENVIRONMENT`: `Sandbox` for development/TestFlight verification or
   `Production` for the public App Store deployment.
 - `APP_STORE_PRODUCT_ELECTION_PASS`: the consumable product ID.
+- `MOBILE_APP_ORIGIN`: the exact bundled-client origin allowed to call the
+  purchase endpoint, normally `capacitor://localhost` on iOS.
 - `APPLE_ROOT_CA_CERTS_BASE64`: comma-separated, base64-encoded DER copies of
   Apple's current root certificates from the Apple PKI page.
 
@@ -44,7 +46,8 @@ The iOS client must:
 2. Convert the Supabase user ID to a UUID and supply it through StoreKit's
    `appAccountToken` purchase option.
 3. Send the resulting signed transaction JWS to
-   `POST /api/storekit/transactions` as `signedTransaction`.
+   `POST /api/storekit/transactions` as `signedTransaction`, with the current
+   Supabase access token in `Authorization: Bearer <token>`.
 4. Refresh the account credit balance after the API returns success.
 5. Call StoreKit `finish()` only after the server confirms that the credit was
    delivered or that the transaction was already fulfilled.

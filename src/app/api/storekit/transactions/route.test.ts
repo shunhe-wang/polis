@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   getUserMock,
+  adminGetUserMock,
   rpcMock,
   verifyTransactionMock,
   recordEventMock,
 } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
+  adminGetUserMock: vi.fn(),
   rpcMock: vi.fn(),
   verifyTransactionMock: vi.fn(),
   recordEventMock: vi.fn(),
@@ -18,7 +20,10 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ rpc: rpcMock }),
+  createAdminClient: () => ({
+    auth: { getUser: adminGetUserMock },
+    rpc: rpcMock,
+  }),
 }));
 
 vi.mock("@/lib/app-store-verification", () => ({
@@ -29,7 +34,7 @@ vi.mock("@/lib/observability", () => ({
   recordAppEvent: recordEventMock,
 }));
 
-import { POST } from "./route";
+import { OPTIONS, POST } from "./route";
 
 describe("StoreKit transaction API", () => {
   beforeEach(() => {
@@ -59,11 +64,13 @@ describe("StoreKit transaction API", () => {
       error: null,
     });
     recordEventMock.mockResolvedValue(undefined);
+    adminGetUserMock.mockResolvedValue({ data: { user: null }, error: null });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     delete process.env.APP_STORE_PRODUCT_ELECTION_PASS;
+    delete process.env.MOBILE_APP_ORIGIN;
   });
 
   it("verifies and atomically fulfills a purchase for the signed-in account", async () => {
@@ -140,5 +147,61 @@ describe("StoreKit transaction API", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Purchase was verified but could not be fulfilled",
     });
+  });
+
+  it("accepts a validated Supabase bearer token from the native client", async () => {
+    process.env.MOBILE_APP_ORIGIN = "capacitor://localhost";
+    adminGetUserMock.mockResolvedValue({
+      data: {
+        user: {
+          id: "11111111-1111-4111-8111-111111111111",
+          email: "buyer@example.com",
+          email_confirmed_at: "2026-07-01T12:00:00.000Z",
+        },
+      },
+      error: null,
+    });
+
+    const response = await POST(
+      new Request("https://polis.example/api/storekit/transactions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mobile-access-token",
+          "content-type": "application/json",
+          origin: "capacitor://localhost",
+        },
+        body: JSON.stringify({ signedTransaction: "header.payload.signature" }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "capacitor://localhost"
+    );
+    expect(adminGetUserMock).toHaveBeenCalledWith("mobile-access-token");
+    expect(getUserMock).not.toHaveBeenCalled();
+  });
+
+  it("permits preflight only from the configured native origin", async () => {
+    process.env.MOBILE_APP_ORIGIN = "capacitor://localhost";
+
+    const allowed = await OPTIONS(
+      new Request("https://polis.example/api/storekit/transactions", {
+        method: "OPTIONS",
+        headers: { origin: "capacitor://localhost" },
+      })
+    );
+    const rejected = await OPTIONS(
+      new Request("https://polis.example/api/storekit/transactions", {
+        method: "OPTIONS",
+        headers: { origin: "https://attacker.example" },
+      })
+    );
+
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe(
+      "capacitor://localhost"
+    );
+    expect(rejected.status).toBe(403);
   });
 });

@@ -5,15 +5,38 @@ import { getSameOriginError } from "@/lib/csrf";
 import { recordAppEvent } from "@/lib/observability";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { User } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
 const ROUTE = "/api/storekit/transactions";
 
+function getMobileCorsHeaders(request: Request): Record<string, string> | null {
+  const origin = request.headers.get("origin");
+  const allowedOrigin = process.env.MOBILE_APP_ORIGIN?.trim();
+  if (!origin || !allowedOrigin || origin !== allowedOrigin) return null;
+
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
+}
+
+export async function OPTIONS(request: Request) {
+  const headers = getMobileCorsHeaders(request);
+  if (!headers) return new Response(null, { status: 403 });
+  return new Response(null, { status: 204, headers });
+}
+
 export async function POST(request: Request) {
-  const csrfError = getSameOriginError(request);
+  const corsHeaders = getMobileCorsHeaders(request);
+  const respond = (body: unknown, status = 200) =>
+    Response.json(body, { status, headers: corsHeaders ?? undefined });
+  const csrfError = corsHeaders ? null : getSameOriginError(request);
   if (csrfError) {
-    return Response.json({ error: csrfError }, { status: 403 });
+    return respond({ error: csrfError }, 403);
   }
 
   const body = await request.json().catch(() => null);
@@ -29,39 +52,39 @@ export async function POST(request: Request) {
     signedTransaction.length > 50_000 ||
     signedTransaction.split(".").length !== 3
   ) {
-    return Response.json(
-      { error: "A valid signed App Store transaction is required" },
-      { status: 400 }
-    );
+    return respond({ error: "A valid signed App Store transaction is required" }, 400);
   }
 
   const supabase = await createClient();
   const admin = createAdminClient();
-  if (!supabase || !admin) {
-    return Response.json(
-      { error: "Purchase verification is not configured" },
-      { status: 503 }
-    );
+  if (!admin) {
+    return respond({ error: "Purchase verification is not configured" }, 503);
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const authorization = request.headers.get("authorization");
+  let user: User | null = null;
+  if (authorization?.startsWith("Bearer ")) {
+    const accessToken = authorization.slice("Bearer ".length).trim();
+    if (accessToken) {
+      const result = await admin.auth.getUser(accessToken);
+      user = result.data.user;
+    }
+  } else if (supabase) {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  }
   if (!user?.email) {
-    return Response.json({ error: "Authentication required" }, { status: 401 });
+    return respond({ error: "Authentication required" }, 401);
   }
 
   const trust = getAccountTrustStatus(user);
   if (!trust.trusted) {
-    return Response.json({ error: trust.reason }, { status: 403 });
+    return respond({ error: trust.reason }, 403);
   }
 
   const productId = process.env.APP_STORE_PRODUCT_ELECTION_PASS?.trim();
   if (!productId) {
-    return Response.json(
-      { error: "The App Store product is not configured" },
-      { status: 503 }
-    );
+    return respond({ error: "The App Store product is not configured" }, 503);
   }
 
   try {
@@ -109,7 +132,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return Response.json({
+    return respond({
       ok: true,
       alreadyFulfilled,
       creditsGranted: alreadyFulfilled ? 0 : transaction.creditsGranted,
@@ -134,7 +157,7 @@ export async function POST(request: Request) {
             : "App Store transaction verification failed",
       },
     });
-    return Response.json(
+    return respond(
       {
         error: configurationFailure
           ? "App Store verification is not configured"
@@ -142,7 +165,7 @@ export async function POST(request: Request) {
             ? "Purchase was verified but could not be fulfilled"
           : "Could not verify or fulfill this App Store purchase",
       },
-      { status: configurationFailure ? 503 : fulfillmentFailure ? 500 : 400 }
+      configurationFailure ? 503 : fulfillmentFailure ? 500 : 400
     );
   }
 }
