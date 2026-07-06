@@ -75,6 +75,34 @@ async function seedGuideSession(page: Page) {
   );
 }
 
+test("password sign-in exposes account recovery", async ({ page }) => {
+  await page.goto("/auth/login");
+  await expect(page.getByRole("link", { name: "Forgot password?" })).toBeVisible();
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(page.getByRole("heading", { name: "Reset Your Password" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send Reset Link" })).toBeVisible();
+});
+
+test("mobile header keeps signed-in navigation in a compact menu", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/account", async (route) => {
+    await route.fulfill({
+      json: accountSummary({
+        isAuthenticated: true,
+        trustedAccount: true,
+        electionPassCredits: 1,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Open navigation menu").click();
+  const mobileNav = page.getByRole("navigation", { name: "Mobile account navigation" });
+  await expect(mobileNav.getByRole("link", { name: "My Guides" })).toBeVisible();
+  await expect(mobileNav.getByRole("link", { name: "Account", exact: true })).toBeVisible();
+  await expect(mobileNav.getByRole("button", { name: "Sign Out" })).toBeVisible();
+});
+
 test("pricing shows guest/auth options when logged out", async ({ page }) => {
   await page.route("**/api/account", async (route) => {
     await route.fulfill({ json: accountSummary() });

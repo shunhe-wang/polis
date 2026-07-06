@@ -92,7 +92,7 @@ describe("persistence", () => {
 
   it("saves ballot input to Supabase and sessionStorage", async () => {
     vi.mocked(createClient).mockReturnValue(
-      createSupabaseMock()
+      createSupabaseMock() as unknown as NonNullable<ReturnType<typeof createClient>>
     );
 
     const ballot: BallotInput = {
@@ -141,7 +141,7 @@ describe("persistence", () => {
           races: [],
           measures: [],
         },
-      })
+      }) as unknown as NonNullable<ReturnType<typeof createClient>>
     );
 
     const hydrated = await syncFromSupabase();

@@ -1,8 +1,18 @@
 # Polis production and App Store readiness plan
 
 **Prepared:** July 4, 2026  
+**Last updated:** July 6, 2026
 **Election day:** November 3, 2026[^fec]  
-**Runway:** 122 days
+**Runway:** 120 days
+
+## Current status at a glance
+
+- **Closed launch blockers:** client-writable credits/quotas, in-app account deletion, explicit AI-data consent, vulnerable Next.js pin, and unreliable/unmetered research prefetch.
+- **Commercial route selected:** StoreKit server verification and atomic fulfillment are implemented; the native client, notifications/refunds, App Store Connect setup, and sandbox/TestFlight proof remain.
+- **Account recovery implemented:** reset request, PKCE callback, new-password page, open-redirect protection, and a Supabase recovery template are in the repository. Production SMTP/template configuration and a real-inbox test remain.
+- **Web UX:** the signed-in mobile header now uses a compact menu, and `tsc --noEmit` is clean across application and test files.
+- **Ballot data decision:** Google Civic remains a best-effort convenience source. Official sample-ballot upload/paste plus review is the deterministic fallback; a licensed-provider bake-off remains a prelaunch business decision.
+- **Overall:** the web foundation is materially safer, but Polis is not production/App Store ready until the native client, live payment testing, ballot coverage/quality evidence, external alerting, and release operations are complete.
 
 ## Executive recommendation
 
@@ -64,6 +74,20 @@ The admin dashboard reports zeroes and labels API usage as “Not yet wired.” 
 
 **Implementation status (July 5):** partially complete. The restricted dashboard now reports real user, saved-guide, research, Z.AI call/error/latency/token/cost, web revenue, unfulfilled-order, recorded quota-denial, recent-error, and election-data freshness metrics. Live provider telemetry was verified through the candidate route. A daily authenticated production cron probes the Google Civic ballot path and reports healthy, degraded, failed, or stale status without logging the configured address. Migration `019_backfill_legacy_billing_fulfillment.sql` repairs fulfillment bookkeeping for orders created before the atomic checkout migration. Cost estimates remain disabled until current model rates are configured. External error reporting, alert delivery, queue depth, and StoreKit reconciliation remain outstanding.
 
+### P1: password accounts had no recovery path
+
+Password users could sign in and delete an account, but a forgotten password made the account inaccessible.
+
+**Implementation status (July 6):** repository work is complete. `/auth/forgot-password` sends a non-enumerating Supabase recovery request, `/auth/callback` exchanges the PKCE code and now rejects external redirect targets, and `/auth/reset-password` validates the session and updates the password. The production recovery email is in `supabase/templates/recovery.html`; exact dashboard, redirect URL, SMTP, and inbox-test steps are in `docs/supabase-password-recovery.md`. This remains a deployment verification item until the hosted template and custom SMTP are configured and a real recovery link is exercised.
+
+### P2: signed-in mobile navigation wrapped into two rows
+
+**Implementation status (July 6):** complete in the repository. Desktop retains the full navigation, while smaller viewports use a compact accessible menu with the signed-in destinations, purchase path, and sign-out action. Browser coverage checks the 390-pixel signed-in layout.
+
+### P2: test files failed the standalone TypeScript gate
+
+**Implementation status (July 6):** complete. Environment mutation now uses Vitest's typed environment stubs, the account-trust boundary reflects Supabase's nullable confirmation field, and persistence mocks use an explicit test-boundary cast. `npx tsc --noEmit` is clean.
+
 ## App Store decisions
 
 ### Payments
@@ -118,7 +142,9 @@ Prepare:
 
 ## Election-data and AI quality gate
 
-Google Civic can return contests, candidates, polling information, election officials, and per-record source metadata; it also supports `officialOnly=true`.[^google-civic] Use official data as the ballot backbone whenever available and reserve AI for research/synthesis.
+Google Civic's current public documentation still exposes election and voter-information queries for supported elections.[^google-civic] That does not make it a complete exact-ballot feed: local, precinct-specific, and not-yet-published contests can be absent. Polis will therefore keep it as a best-effort convenience lookup rather than a launch-critical guarantee.
+
+When a voter has an official sample ballot, the recommended path is now upload/paste, editable draft review, and retained source/confidence metadata. Manual entry remains the no-AI fallback. Before signing a licensed feed, run a representative-address bake-off covering exact-ballot resolution, local/judicial/measure coverage, provenance, corrections, SLA, retention rights, and total price. Democracy Works publishes a commercial Elections API and is a concrete candidate for that evaluation.[^democracy-works] The decision record is `docs/ballot-data-source-strategy.md`.
 
 Before public launch:
 
@@ -140,6 +166,7 @@ Before production traffic:
 - verify RLS table-by-table with authenticated adversarial tests;
 - patch dependencies and pin a supported Node version;
 - configure custom domain, DNS, TLS, email deliverability, and Supabase redirect URLs;
+- install the recovery email template, configure custom SMTP, and test reset links against production and staging redirects;
 - configure production Stripe webhooks and idempotent reconciliation;
 - set Z.AI spend caps, timeouts, retries with jitter, and a degraded mode when AI is unavailable;
 - load-test candidate lookup, ballot parsing, research streaming, and webhook fulfillment;
@@ -188,6 +215,7 @@ This leaves roughly five weeks for adoption and two review/fix cycles before Nov
 Do not call the product production-ready until all of these are true:
 
 - no client-writable credits or quotas;
+- password reset succeeds through a real production inbox and expired links fail safely;
 - account deletion works end-to-end;
 - explicit AI data-sharing consent is recorded;
 - privacy policy and App Store disclosures match actual behavior;
@@ -208,5 +236,6 @@ Do not call the product production-ready until all of these are true:
 [^testflight]: Apple, [TestFlight overview](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/).
 [^capacitor]: Ionic, [Capacitor documentation](https://capacitorjs.com/docs).
 [^google-civic]: Google, [Civic Information API voterInfoQuery](https://developers.google.com/civic-information/docs/v2/elections/voterInfoQuery).
+[^democracy-works]: Democracy Works, [Elections API](https://www.democracy.works/elections-api).
 [^eac]: U.S. Election Assistance Commission, [Voting 101: Election Information for New Voters](https://www.eac.gov/sites/default/files/2024-12/Voting_101_Flyer_Full_Page_508.pdf).
 [^fec]: Federal Election Commission, [2026 congressional primary dates and candidate filing deadlines](https://www.fec.gov/resources/cms-content/documents/2026pdates.pdf).
