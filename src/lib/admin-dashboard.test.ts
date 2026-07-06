@@ -59,6 +59,11 @@ describe("admin dashboard operations summary", () => {
         { amount_total: 100, currency: "usd", status: "paid" },
         { amount_total: 100, currency: "usd", status: "unpaid" },
       ],
+      appStoreTransactions: [
+        { credits_granted: 1, fulfilled_at: "2026-07-05T11:00:00.000Z" },
+        { credits_granted: 0, fulfilled_at: null },
+      ],
+      unfulfilledAppStoreTransactions: 1,
       providerPricing: {
         inputUsdPerMillion: 1,
         outputUsdPerMillion: 3,
@@ -93,6 +98,9 @@ describe("admin dashboard operations summary", () => {
       paidOrders24h: 2,
       grossRevenueCents24h: 200,
       unfulfilledOrders: 1,
+      appStorePurchases24h: 2,
+      appStoreCreditsGranted24h: 1,
+      unfulfilledAppStoreTransactions: 1,
       recordedQuotaDenials24h: 1,
       electionDataStatus: "healthy",
       latestElectionDataProbeAt: "2026-07-05T11:30:00.000Z",
@@ -111,6 +119,8 @@ describe("admin dashboard operations summary", () => {
       unfulfilledOrders: 0,
       events: [],
       orders: [],
+      appStoreTransactions: [],
+      unfulfilledAppStoreTransactions: 0,
       providerPricing: null,
       latestElectionDataProbe: {
         category: "election_data",

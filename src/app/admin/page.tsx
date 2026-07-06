@@ -73,6 +73,8 @@ export default async function AdminPage() {
   }
 
   const dashboard = await loadAdminDashboardData(admin);
+  const reconciliationIssues =
+    dashboard.unfulfilledOrders + dashboard.unfulfilledAppStoreTransactions;
 
   return (
     <main className="flex flex-1 flex-col items-center px-4 py-8 sm:py-16">
@@ -193,22 +195,37 @@ export default async function AdminPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Billing and Quotas</h2>
             <Badge
-              variant={dashboard.unfulfilledOrders > 0 ? "destructive" : "secondary"}
+              variant={reconciliationIssues > 0 ? "destructive" : "secondary"}
             >
-              {dashboard.unfulfilledOrders > 0
-                ? `${dashboard.unfulfilledOrders} reconciliation issue${dashboard.unfulfilledOrders === 1 ? "" : "s"}`
+              {reconciliationIssues > 0
+                ? `${reconciliationIssues} reconciliation issue${reconciliationIssues === 1 ? "" : "s"}`
                 : "Billing reconciled"}
             </Badge>
           </div>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatCard label="Paid Orders" value={dashboard.paidOrders24h} />
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-7">
+            <StatCard
+              label="Stripe Paid Orders"
+              value={dashboard.paidOrders24h}
+            />
             <StatCard
               label="Gross Web Revenue"
               value={formatUsd(dashboard.grossRevenueCents24h)}
             />
             <StatCard
-              label="Unfulfilled Orders"
+              label="Unfulfilled Stripe"
               value={dashboard.unfulfilledOrders}
+            />
+            <StatCard
+              label="StoreKit Purchases"
+              value={dashboard.appStorePurchases24h}
+            />
+            <StatCard
+              label="StoreKit Credits"
+              value={dashboard.appStoreCreditsGranted24h}
+            />
+            <StatCard
+              label="Unfulfilled StoreKit"
+              value={dashboard.unfulfilledAppStoreTransactions}
             />
             <StatCard
               label="Recorded Quota Denials"

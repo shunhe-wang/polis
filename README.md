@@ -30,6 +30,10 @@ The production deployment runs a daily Google Civic health probe. Set a strong
 address whose expected ballot availability is understood by the operations
 team. The address is used for the lookup but is not written to operational logs.
 
+iOS purchases use StoreKit while web purchases remain on Stripe. The required
+App Store Connect setup, server variables, and native transaction contract are
+documented in [`docs/app-store-commercial-route.md`](docs/app-store-commercial-route.md).
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

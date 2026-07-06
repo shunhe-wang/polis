@@ -15,6 +15,11 @@ export interface AdminOrderRow {
   status: string;
 }
 
+export interface AdminAppStoreTransactionRow {
+  credits_granted: number;
+  fulfilled_at: string | null;
+}
+
 interface AdminOperationsInput {
   totalUsers: number;
   activeGuides: number;
@@ -22,6 +27,8 @@ interface AdminOperationsInput {
   unfulfilledOrders: number;
   events: AdminEventRow[];
   orders: AdminOrderRow[];
+  appStoreTransactions: AdminAppStoreTransactionRow[];
+  unfulfilledAppStoreTransactions: number;
   providerPricing: ProviderPricing | null;
   latestElectionDataProbe: AdminEventRow | null;
   now?: Date;
@@ -59,6 +66,9 @@ export interface AdminDashboardData {
   paidOrders24h: number;
   grossRevenueCents24h: number;
   unfulfilledOrders: number;
+  appStorePurchases24h: number;
+  appStoreCreditsGranted24h: number;
+  unfulfilledAppStoreTransactions: number;
   recordedQuotaDenials24h: number;
   electionDataStatus: ElectionDataStatus;
   latestElectionDataProbeAt: string | null;
@@ -151,6 +161,13 @@ export function summarizeAdminOperations(
       0
     ),
     unfulfilledOrders: input.unfulfilledOrders,
+    appStorePurchases24h: input.appStoreTransactions.length,
+    appStoreCreditsGranted24h: input.appStoreTransactions.reduce(
+      (total, transaction) =>
+        total + Number(transaction.credits_granted ?? 0),
+      0
+    ),
+    unfulfilledAppStoreTransactions: input.unfulfilledAppStoreTransactions,
     recordedQuotaDenials24h: input.events.filter(
       (event) =>
         event.event.endsWith("_quota_reached") ||
@@ -216,6 +233,8 @@ export async function loadAdminDashboardData(
     eventsResult,
     ordersResult,
     unfulfilledResult,
+    appStoreTransactionsResult,
+    unfulfilledAppStoreResult,
     latestProbeResult,
   ] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
@@ -233,6 +252,14 @@ export async function loadAdminDashboardData(
     admin
       .from("billing_orders")
       .select("id", { count: "exact", head: true })
+      .is("fulfilled_at", null),
+    admin
+      .from("app_store_transactions")
+      .select("credits_granted, fulfilled_at")
+      .gte("purchase_date", since),
+    admin
+      .from("app_store_transactions")
+      .select("transaction_id", { count: "exact", head: true })
       .is("fulfilled_at", null),
     admin
       .from("app_event_logs")
@@ -262,6 +289,12 @@ export async function loadAdminDashboardData(
   if (unfulfilledResult.error) {
     warnings.push("Billing reconciliation status is unavailable.");
   }
+  if (appStoreTransactionsResult.error) {
+    warnings.push("Recent App Store purchase totals are unavailable.");
+  }
+  if (unfulfilledAppStoreResult.error) {
+    warnings.push("App Store reconciliation status is unavailable.");
+  }
   if (latestProbeResult.error) {
     warnings.push("Election-data freshness is unavailable.");
   }
@@ -284,6 +317,11 @@ export async function loadAdminDashboardData(
     unfulfilledOrders: unfulfilledResult.error
       ? 0
       : Number(unfulfilledResult.count ?? 0),
+    appStoreTransactions: (appStoreTransactionsResult.data ?? []) as
+      AdminAppStoreTransactionRow[],
+    unfulfilledAppStoreTransactions: unfulfilledAppStoreResult.error
+      ? 0
+      : Number(unfulfilledAppStoreResult.count ?? 0),
     events: (eventsResult.data ?? []) as AdminEventRow[],
     orders: (ordersResult.data ?? []) as AdminOrderRow[],
     providerPricing,

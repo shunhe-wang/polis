@@ -70,10 +70,18 @@ The admin dashboard reports zeroes and labels API usage as “Not yet wired.” 
 
 Election Pass credits unlock digital functionality consumed inside the app. Apple says these unlocks must use In-App Purchase; it also says purchased credits may not expire.[^apple-review] Existing web purchases can remain on Stripe, but a multiplatform service generally needs the same items available as IAP in the app.[^apple-review]
 
-Choose one by July 10:
+The two implementation options considered were:
 
 - **Recommended commercial route:** add StoreKit consumable credit products for iOS; verify App Store transactions server-side; grant credits idempotently into the existing entitlement ledger; keep Stripe only on web.
 - **Fastest route:** make the iOS edition free and rate-limited through November 3, remove all iOS purchase links and purchased-credit dependencies, and revisit monetization after the election.
+
+**Decision (July 6):** selected the recommended commercial route. The backend
+now verifies Apple-signed consumable transactions, binds purchases to the Polis
+account through `appAccountToken`, and atomically grants idempotent Election Pass
+credits. Migration `020_app_store_transaction_fulfillment.sql` adds the ledger
+and fulfillment function; migration `021_harden_app_store_idempotency.sql`
+rejects replays whose immutable transaction data changed. App Store Connect product setup, the native StoreKit
+client, server notifications/refunds, and sandbox/TestFlight validation remain.
 
 Although current U.S. storefront rules permit external purchase links in more situations, relying on that interpretation for a first, time-sensitive review is higher risk than StoreKit.
 
@@ -89,7 +97,7 @@ Include at least a small native value layer:
 - election reminders or push notifications;
 - offline access to the user's saved guide;
 - native file/photo picker for ballot uploads;
-- StoreKit, if using paid iOS credits.
+- StoreKit for paid iOS credits.
 
 Keep the Next.js/Vercel app as the API and web surface. Do not embed server secrets in the mobile bundle.
 
