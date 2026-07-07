@@ -14,8 +14,8 @@ verified, remove it rather than retaining a completion history.
    through a real inbox.
 3. Establish isolated staging and production environments, then exercise
    migrations, rollback, and backup restoration.
-4. Build the native iOS client and complete StoreKit sandbox fulfillment from
-   an actual device or TestFlight build.
+4. Compile and device-test the native iOS client, then complete StoreKit sandbox
+   fulfillment from an actual device or TestFlight build.
 5. Prove ballot coverage and AI quality with representative voters before
    inviting a public beta.
 6. Finish alerting, incident response, App Store metadata, and review materials.
@@ -61,16 +61,14 @@ Evaluation criteria are in `docs/ballot-data-source-strategy.md`.
 
 ## Engineering work still open
 
-### P0: native iOS application and StoreKit client
+### P0: native iOS completion and StoreKit device verification
 
-Build a bundled Capacitor client that calls the hosted Next.js APIs without
-embedding server secrets. A remote website inside a shell is not sufficient for
-App Review.[^apple-review][^capacitor]
+Install/select full Xcode, compile the generated Capacitor project, set the
+final bundle identifier and signing team, and exercise it on a physical device.
+The remaining native-value work is:[^apple-review][^capacitor]
 
 Required v1 native value:
 
-- secure session storage;
-- StoreKit purchase UI and `appAccountToken` account binding;
 - native file/photo picker for ballot uploads;
 - native share sheet and deep links for saved guides;
 - offline access to a previously saved guide;

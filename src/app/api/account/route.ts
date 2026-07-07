@@ -7,8 +7,49 @@ import { getSameOriginError } from "@/lib/csrf";
 import { isValidAccountDeletionConfirmation } from "@/lib/account-deletion";
 import { getStripeClient } from "@/lib/stripe";
 import { recordAppEvent } from "@/lib/observability";
+import { getBearerAccessToken, getMobileCorsHeaders } from "@/lib/mobile-request";
+import { createAccessTokenClient } from "@/lib/supabase/token";
 
-export async function GET() {
+export async function OPTIONS(request: Request) {
+  const headers = getMobileCorsHeaders(request, ["GET"]);
+  if (!headers) return new Response(null, { status: 403 });
+  return new Response(null, { status: 204, headers });
+}
+
+export async function GET(request: NextRequest) {
+  const corsHeaders = getMobileCorsHeaders(request, ["GET"]);
+  const accessToken = getBearerAccessToken(request);
+  if (corsHeaders) {
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+    const admin = createAdminClient();
+    const tokenClient = createAccessTokenClient(accessToken);
+    if (!admin || !tokenClient) {
+      return NextResponse.json(
+        { error: "Account access is not configured" },
+        { status: 503, headers: corsHeaders }
+      );
+    }
+    const { data, error } = await admin.auth.getUser(accessToken);
+    if (error || !data.user) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+    return NextResponse.json(
+      {
+        ...(await getAccountSummaryForUser(tokenClient, data.user)),
+        email: data.user.email ?? null,
+      },
+      { headers: corsHeaders }
+    );
+  }
+
   const supabase = await createClient();
   if (!supabase) {
     return NextResponse.json(DEFAULT_ACCOUNT_SUMMARY);
