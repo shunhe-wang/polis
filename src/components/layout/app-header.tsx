@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -18,6 +18,11 @@ export function AppHeader() {
   const router = useRouter();
   const [account, setAccount] = useState<AccountSummary>(DEFAULT_ACCOUNT_SUMMARY);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const mobileMenuRef = useRef<HTMLDetailsElement>(null);
+
+  function closeMobileMenu() {
+    if (mobileMenuRef.current) mobileMenuRef.current.open = false;
+  }
 
   useEffect(() => {
     void getAccountSummary().then(setAccount);
@@ -124,7 +129,7 @@ export function AppHeader() {
             </Badge>
           )}
           <ThemeToggle />
-          <details className="relative">
+          <details ref={mobileMenuRef} className="relative">
             <summary
               aria-label="Open navigation menu"
               className={`${buttonVariants({ variant: "outline", size: "icon-sm" })} cursor-pointer list-none rounded-full [&::-webkit-details-marker]:hidden`}
@@ -134,6 +139,7 @@ export function AppHeader() {
             <nav
               aria-label="Mobile account navigation"
               className="absolute right-0 mt-2 flex min-w-48 flex-col gap-2 rounded-xl border bg-background p-3 shadow-xl"
+              onClick={closeMobileMenu}
             >
               {account.isAuthenticated && (
                 <>

@@ -53,6 +53,28 @@ class ZaiApiError extends Error {
   }
 }
 
+// Map internal provider/database errors to a message safe to show end users.
+// Raw upstream error bodies and stack-adjacent messages stay in app_event_logs
+// (recorded at the failure site), never in API responses.
+export function toUserFacingResearchError(
+  err: unknown,
+  fallback: string
+): string {
+  if (err instanceof Error && "status" in err) {
+    const status = (err as { status: unknown }).status;
+    if (status === 429) {
+      return "Rate limited by the AI service. Please try again in a moment.";
+    }
+  }
+  if (
+    err instanceof Error &&
+    (err.name === "AbortError" || err.name === "TimeoutError")
+  ) {
+    return "The AI service took too long to respond. Please try again.";
+  }
+  return fallback;
+}
+
 function getZaiConfig(): {
   apiKey: string;
   baseUrl: string;
@@ -77,6 +99,15 @@ export function isZaiConfigured(): boolean {
   return Boolean(process.env.ZAI_API_KEY?.trim());
 }
 
+const DEFAULT_ZAI_TIMEOUT_MS = 120_000;
+
+function getZaiTimeoutMs(): number {
+  const configured = Number.parseInt(process.env.ZAI_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_ZAI_TIMEOUT_MS;
+}
+
 async function postToZai<T>(
   path: string,
   body: Record<string, unknown>,
@@ -86,6 +117,14 @@ async function postToZai<T>(
   const startedAt = Date.now();
   const model = typeof body.model === "string" ? body.model : "unknown";
   let response: Response;
+
+  // A hung upstream must not stall a research stream until the platform kills
+  // the function; every request gets a timeout even when the caller passes no
+  // signal of its own.
+  const timeoutSignal = AbortSignal.timeout(getZaiTimeoutMs());
+  const requestSignal = signal
+    ? AbortSignal.any([signal, timeoutSignal])
+    : timeoutSignal;
 
   try {
     response = await fetch(`${baseUrl}${path}`, {
@@ -97,7 +136,7 @@ async function postToZai<T>(
       },
       body: JSON.stringify(body),
       cache: "no-store",
-      signal,
+      signal: requestSignal,
     });
   } catch (error) {
     await recordAppEvent({
@@ -156,7 +195,7 @@ async function postToZai<T>(
   }
 
   const usage = (payload as { usage?: Record<string, unknown> }).usage;
-  const webSearchUses =
+  const webSearchToolAttached =
     Array.isArray(body.tools) &&
     body.tools.some(
       (tool) =>
@@ -164,9 +203,17 @@ async function postToZai<T>(
         typeof tool === "object" &&
         "type" in tool &&
         tool.type === "web_search"
-    )
-      ? 1
-      : 0;
+    );
+  // Prefer the provider-reported search count when present; the attached-tool
+  // fallback is an estimate (the model may search zero or several times).
+  const reportedWebSearchCount = [
+    usage?.web_search_count,
+    usage?.webSearchCount,
+  ].find((value) => typeof value === "number" && Number.isFinite(value)) as
+    | number
+    | undefined;
+  const webSearchUses =
+    reportedWebSearchCount ?? (webSearchToolAttached ? 1 : 0);
   await recordAppEvent({
     category: "provider",
     event: "zai_request_succeeded",

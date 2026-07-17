@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { MeasureResult } from "@/lib/types";
+import { ReportContentForm } from "./report-content-form";
 
 interface MeasureCardProps {
   result: MeasureResult;
@@ -123,6 +124,8 @@ export function MeasureCard({ result }: MeasureCardProps) {
             </div>
           )}
         </div>
+
+        <ReportContentForm subjectType="measure" subjectName={result.title} />
       </CardContent>
     </Card>
   );

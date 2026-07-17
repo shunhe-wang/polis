@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
@@ -15,28 +15,42 @@ import {
   type AccountSummary,
 } from "@/lib/freemium";
 
+// The values read below never change during a page visit, so the store never
+// emits; useSyncExternalStore is used purely for its hydration-safe
+// server-snapshot handling.
+const subscribeToNothing = () => () => {};
+
 export default function HomePage() {
   const [account, setAccount] = useState<AccountSummary>(
     DEFAULT_ACCOUNT_SUMMARY
   );
-  const [accountDeleted] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("account") === "deleted";
-  });
-  const [hasValuesDraft] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return Boolean(
-      safeSessionStorageGet("valuesProfile") ??
-        safeLocalStorageGet("valuesProfile")
-    );
-  });
-  const [hasBallotDraft] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return Boolean(
-      safeSessionStorageGet("ballotInput") ??
-        safeLocalStorageGet("ballotInput")
-    );
-  });
+  // The server render has no query string or storage; useSyncExternalStore
+  // hydrates with the server snapshot and re-renders with the client value
+  // without a hydration mismatch.
+  const accountDeleted = useSyncExternalStore(
+    subscribeToNothing,
+    () =>
+      new URLSearchParams(window.location.search).get("account") === "deleted",
+    () => false
+  );
+  const hasValuesDraft = useSyncExternalStore(
+    subscribeToNothing,
+    () =>
+      Boolean(
+        safeSessionStorageGet("valuesProfile") ??
+          safeLocalStorageGet("valuesProfile")
+      ),
+    () => false
+  );
+  const hasBallotDraft = useSyncExternalStore(
+    subscribeToNothing,
+    () =>
+      Boolean(
+        safeSessionStorageGet("ballotInput") ??
+          safeLocalStorageGet("ballotInput")
+      ),
+    () => false
+  );
   const [latestGuideId, setLatestGuideId] = useState<string | null>(null);
   const [savedGuideCount, setSavedGuideCount] = useState(0);
 

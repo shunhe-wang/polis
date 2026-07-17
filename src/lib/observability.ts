@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { deliverAlertWebhook } from "@/lib/alerts";
 
 export interface AppEventInput {
   category: string;
@@ -10,6 +11,10 @@ export interface AppEventInput {
 }
 
 export async function recordAppEvent(input: AppEventInput): Promise<void> {
+  // External alert delivery is independent of database logging so an outage
+  // in one channel never silences the other.
+  await deliverAlertWebhook(input);
+
   const logLine = JSON.stringify({
     level: input.severity ?? "info",
     category: input.category,

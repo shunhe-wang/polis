@@ -207,6 +207,36 @@ export async function enforceStarterAnalysisQuota(
   return null;
 }
 
+// Refund a reservation made by enforceStarterAnalysisQuota after the paid AI
+// work failed, so an unusable response never burns the user's single free
+// analysis. Requires the service-role client: migration 017 revoked counter
+// writes from authenticated users.
+export async function refundStarterAnalysisReservation(
+  admin: SupabaseClient,
+  userId: string
+): Promise<void> {
+  const windowStart = getStarterAnalysisWindowStart().toISOString();
+  const { data, error } = await admin
+    .from("ai_usage_counters")
+    .select("units")
+    .eq("user_id", userId)
+    .eq("scope", STARTER_ANALYSIS_SCOPE)
+    .eq("window_start", windowStart)
+    .maybeSingle();
+
+  if (error || !data) return;
+
+  await admin
+    .from("ai_usage_counters")
+    .update({
+      units: Math.max(0, Number(data.units ?? 0) - 1),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("scope", STARTER_ANALYSIS_SCOPE)
+    .eq("window_start", windowStart);
+}
+
 export async function enforceQuotaRules(
   supabase: SupabaseClient,
   rules: Array<{ rule: QuotaRule; incrementBy: number }>,

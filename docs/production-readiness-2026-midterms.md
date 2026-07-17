@@ -1,8 +1,8 @@
 # Polis production and App Store readiness plan
 
-**Last updated:** July 7, 2026
+**Last updated:** July 17, 2026
 **Election day:** November 3, 2026[^fec]  
-**Runway:** 119 days
+**Runway:** 109 days
 
 This document lists outstanding work only. Once an item is implemented and
 verified, remove it rather than retaining a completion history.
@@ -45,9 +45,25 @@ The exact procedure is in `docs/supabase-password-recovery.md`.
   including D-U-N-S and binding-authority verification.[^apple-enrollment]
 - Create the iOS app record, bundle identifier, and consumable Election Pass
   product in App Store Connect.
+- Configure the App Store Server Notifications V2 URL
+  (`/api/storekit/notifications`) so refunds and revocations claw back credits
+  automatically.
 - Provide tax, banking, agreements, and required business information.
 - Decide the support URL and public marketing/company website used during
-  review.
+  review (all other submission materials are drafted in
+  `docs/app-store-review-package.md`).
+- Replace the stock Capacitor app icon with Polis branding.
+
+### Alerting and evidence runs
+
+- Set `ALERT_WEBHOOK_URL` (Slack-compatible) in staging and production so
+  error events page the on-call; runbooks in `docs/runbooks/` assume it.
+- Run `npm run eval:coverage -- --base-url <staging>` for the 50-state
+  ballot-coverage matrix and commit the dated report from
+  `evals/coverage/results/`.
+- Re-run `npm run eval:golden` against the production model configuration and
+  commit the dated report from `evals/golden/results/`; verify the
+  stale-candidacy ground truths in `evals/golden/golden-set.json` first.
 
 ### Commercial ballot-data decision
 
@@ -97,47 +113,51 @@ Google Civic is a best-effort lookup for supported elections, not a guaranteed
 exact-ballot feed.[^google-civic] Official sample-ballot upload/paste and manual
 review remain the fallback.
 
-Before public beta:
+The evidence tooling now exists in `evals/` (see `evals/README.md`): a
+151-address 50-state matrix harness (`npm run eval:coverage`), a versioned
+golden set with thresholds for hallucination, wrong-party attribution, stale
+candidacies, and partisan-skew review (`npm run eval:golden`), an in-product
+correction/report flow (`content_reports` plus the `/admin` queue), and the
+data-takedown procedure in `docs/runbooks/data-correction.md`.
 
-- build a 50-state matrix using representative urban, suburban, and rural
-  addresses;
-- record exact-ballot success, partial results, missing local contests, and
-  official-upload recovery rates;
-- retain source and retrieval time for material election claims;
-- create a versioned golden set for hallucination, wrong-party attribution,
-  stale candidacies, missing races, unsupported claims, and partisan skew;
-- define minimum pass thresholds and freeze model/prompt versions during the
-  final two weeks except for urgent corrections;
-- add an in-product correction/report flow and a rapid data-takedown procedure;
+Still required before public beta:
+
+- run the coverage matrix against staging and commit the report, recording
+  exact-ballot, partial, missing-contest, and official-upload recovery rates;
+- verify the golden-set ground truths, run the benchmark on the production
+  model configuration, and commit the report;
+- freeze model/prompt versions during the final two weeks except for urgent
+  corrections;
 - direct users to state/local election officials for authoritative voting
   procedures.[^eac]
 
 ### P1: production operations and observability
 
-- Add external error reporting and alert delivery for API failures, latency,
-  spend, quota denials, election-data freshness, and payment fulfillment.
-- Add StoreKit and Stripe reconciliation views and alerts.
-- Add queue/backlog visibility or explicitly remove queue expectations from the
-  operating model.
+Runbooks (`docs/runbooks/`), webhook alert delivery on error events
+(`ALERT_WEBHOOK_URL`), StoreKit/Stripe reconciliation counters, and
+refund/revocation handling (Stripe `charge.refunded`, App Store Server
+Notifications) are implemented. Still open:
+
+- Exercise each runbook once against staging (game-day drill), including a
+  practice cache purge and a sandbox refund clawback.
 - Load-test candidate lookup, ballot parsing, research streaming, account
   deletion, and payment fulfillment.
-- Write and exercise provider-outage, data-correction, payment-reconciliation,
-  security-incident, and election-night runbooks.
 - Assign an on-call owner and escalation channel for the final six weeks.
 
 ### P1: App Store review package
 
-Prepare:
+The submission package is drafted in `docs/app-store-review-package.md`
+(privacy label mapping, description, keywords, age rating, export compliance,
+reviewer steps, demo-account spec, and guideline risk
+assessment).[^apple-privacy] Still open:
 
-- Privacy Nutrition Label matching account/email, address, political/value
-  inputs, purchases, usage, diagnostics, and third-party AI processing;[^apple-privacy]
-- screenshots, description, keywords, age rating, export-compliance answers,
-  support URL, and review notes;
-- a permanent review account with a representative ballot and available credit;
-- explicit reviewer steps for consent, ballot import, AI analysis, purchase, and
-  account deletion;
-- visible “not an official election authority” language and links to official
-  state/local sources;
+- capture screenshots from real devices once the native client is complete;
+- create the permanent review account with a representative ballot and
+  available credit;
+- close the gaps the package flags in the bundled iOS client: consent,
+  ballot/guide experience, in-app disclaimer surface, and in-app account
+  deletion UI (the API now supports mobile deletion), which drive guideline
+  4.2/5.1.1(v) risk;
 - accessibility verification for VoiceOver, Dynamic Type, contrast, keyboard,
   and reduced-motion behavior.
 

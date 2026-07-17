@@ -2,6 +2,26 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ProductKey = "election_pass";
 
+// Single source of truth for the price shown in the UI. The amount actually
+// charged is the Stripe price object behind STRIPE_PRICE_ELECTION_PASS (and
+// the App Store product); the admin dashboard warns when the Stripe price
+// drifts from this constant.
+export const ELECTION_PASS_PRICE_CENTS = 100;
+
+export function formatElectionPassPrice(): string {
+  return (ELECTION_PASS_PRICE_CENTS / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
+export function formatElectionPassPriceShort(): string {
+  const dollars = ELECTION_PASS_PRICE_CENTS / 100;
+  return Number.isInteger(dollars)
+    ? `$${dollars}`
+    : formatElectionPassPrice();
+}
+
 export interface AccountEntitlements {
   election_pass_credits: number;
   power_pass_runs_remaining: number;

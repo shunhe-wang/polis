@@ -14,6 +14,30 @@ public final class PolisStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "finish", returnType: CAPPluginReturnPromise)
     ]
 
+    private var updatesTask: Task<Void, Never>?
+
+    // StoreKit 2 requires a Transaction.updates listener from launch: Ask to
+    // Buy approvals, offer-code redemptions, and purchases completed outside
+    // the in-app flow arrive only through this stream. The web layer fulfills
+    // the transaction with the server and then finishes it.
+    override public func load() {
+        updatesTask = Task { [weak self] in
+            for await verification in Transaction.updates {
+                guard let self else { return }
+                if case .verified(let transaction) = verification {
+                    self.notifyListeners("transactionUpdated", data: [
+                        "transactionId": String(transaction.id),
+                        "signedTransaction": verification.jwsRepresentation
+                    ])
+                }
+            }
+        }
+    }
+
+    deinit {
+        updatesTask?.cancel()
+    }
+
     @objc func getProduct(_ call: CAPPluginCall) {
         guard let productID = requiredString("productId", from: call) else { return }
         Task { @MainActor in
@@ -35,12 +59,10 @@ public final class PolisStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func purchase(_ call: CAPPluginCall) {
-        guard let productID = requiredString("productId", from: call),
-              let accountTokenValue = requiredString("appAccountToken", from: call),
-              let accountToken = UUID(uuidString: accountTokenValue) else {
-            if call.getString("appAccountToken") != nil {
-                call.reject("The Polis account ID must be a UUID")
-            }
+        guard let productID = requiredString("productId", from: call) else { return }
+        guard let accountTokenValue = requiredString("appAccountToken", from: call) else { return }
+        guard let accountToken = UUID(uuidString: accountTokenValue) else {
+            call.reject("The Polis account ID must be a UUID")
             return
         }
 

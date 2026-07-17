@@ -7,13 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ISSUE_LABELS, type CandidateResult } from "@/lib/types";
 import { formatPartyDetail } from "@/lib/party-format";
+import { ReportContentForm } from "./report-content-form";
 
 interface CandidateCardProps {
   result: CandidateResult;
   isRecommended: boolean;
+  raceName?: string;
 }
 
-export function CandidateCard({ result, isRecommended }: CandidateCardProps) {
+export function CandidateCard({
+  result,
+  isRecommended,
+  raceName,
+}: CandidateCardProps) {
   const [showDetails, setShowDetails] = useState(false);
 
   const scoreColor =
@@ -167,6 +173,12 @@ export function CandidateCard({ result, isRecommended }: CandidateCardProps) {
             </div>
           </div>
         )}
+
+        <ReportContentForm
+          subjectType="candidate"
+          subjectName={result.name}
+          raceName={raceName}
+        />
       </CardContent>
     </Card>
   );

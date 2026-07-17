@@ -16,6 +16,8 @@
     "start": "next start",
     "lint": "eslint && npm run check --workspace @polis/mobile",
     "test": "vitest run && npm run test --workspace @polis/mobile",
+    "eval:golden": "vitest run --config vitest.eval.config.ts",
+    "eval:coverage": "node evals/run-coverage.mjs",
     "mobile:sync": "npm run sync:ios --workspace @polis/mobile",
     "mobile:open": "npm run open:ios --workspace @polis/mobile",
     "test:e2e": "npm run build && playwright test"

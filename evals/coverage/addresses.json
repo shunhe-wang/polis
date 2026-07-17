@@ -1,0 +1,912 @@
+{
+  "version": "2026.1",
+  "generatedAt": "2026-07-17",
+  "addresses": [
+    {
+      "state": "AL",
+      "locale": "urban",
+      "address": "305 Fountain Circle, Huntsville, AL 35801",
+      "basis": "Huntsville City Hall (largest city in Alabama)"
+    },
+    {
+      "state": "AL",
+      "locale": "suburban",
+      "address": "100 Municipal Ln, Hoover, AL 35216",
+      "basis": "Hoover City Hall (Birmingham suburb)"
+    },
+    {
+      "state": "AL",
+      "locale": "rural",
+      "address": "65 N Alabama Ave, Monroeville, AL 36460",
+      "basis": "Monroe County Courthouse"
+    },
+    {
+      "state": "AK",
+      "locale": "urban",
+      "address": "632 W 6th Ave, Anchorage, AK 99501",
+      "basis": "Anchorage City Hall (largest city in Alaska)"
+    },
+    {
+      "state": "AK",
+      "locale": "suburban",
+      "address": "290 E Herning Ave, Wasilla, AK 99654",
+      "basis": "Wasilla City Hall (Anchorage metro, Mat-Su Valley)"
+    },
+    {
+      "state": "AK",
+      "locale": "rural",
+      "address": "102 Division St, Nome, AK 99762",
+      "basis": "Nome City Hall (Alaska has no county seats; remote small city)"
+    },
+    {
+      "state": "AZ",
+      "locale": "urban",
+      "address": "200 W Washington St, Phoenix, AZ 85003",
+      "basis": "Phoenix City Hall (largest city in Arizona)"
+    },
+    {
+      "state": "AZ",
+      "locale": "suburban",
+      "address": "175 S Arizona Ave, Chandler, AZ 85225",
+      "basis": "Chandler City Hall (Phoenix suburb)"
+    },
+    {
+      "state": "AZ",
+      "locale": "rural",
+      "address": "70 W 3rd St S, St. Johns, AZ 85936",
+      "basis": "Apache County Courthouse"
+    },
+    {
+      "state": "AR",
+      "locale": "urban",
+      "address": "500 W Markham St, Little Rock, AR 72201",
+      "basis": "Little Rock City Hall (largest city in Arkansas)"
+    },
+    {
+      "state": "AR",
+      "locale": "suburban",
+      "address": "300 Main St, North Little Rock, AR 72114",
+      "basis": "North Little Rock City Hall (Little Rock suburb)"
+    },
+    {
+      "state": "AR",
+      "locale": "rural",
+      "address": "107 W Main St, Mountain View, AR 72560",
+      "basis": "Stone County Courthouse"
+    },
+    {
+      "state": "CA",
+      "locale": "urban",
+      "address": "200 N Spring St, Los Angeles, CA 90012",
+      "basis": "Los Angeles City Hall (largest city in California)"
+    },
+    {
+      "state": "CA",
+      "locale": "suburban",
+      "address": "100 N Garfield Ave, Pasadena, CA 91101",
+      "basis": "Pasadena City Hall (Los Angeles suburb)"
+    },
+    {
+      "state": "CA",
+      "locale": "rural",
+      "address": "205 S East St, Alturas, CA 96101",
+      "basis": "Modoc County Courthouse"
+    },
+    {
+      "state": "CO",
+      "locale": "urban",
+      "address": "1437 Bannock St, Denver, CO 80202",
+      "basis": "Denver City and County Building (largest city in Colorado)"
+    },
+    {
+      "state": "CO",
+      "locale": "suburban",
+      "address": "480 S Allison Pkwy, Lakewood, CO 80226",
+      "basis": "Lakewood Civic Center (Denver suburb)"
+    },
+    {
+      "state": "CO",
+      "locale": "rural",
+      "address": "103 3rd Ave, Hugo, CO 80821",
+      "basis": "Lincoln County Courthouse"
+    },
+    {
+      "state": "CT",
+      "locale": "urban",
+      "address": "45 Lyon Terrace, Bridgeport, CT 06604",
+      "basis": "Bridgeport City Hall (largest city in Connecticut)"
+    },
+    {
+      "state": "CT",
+      "locale": "suburban",
+      "address": "50 S Main St, West Hartford, CT 06107",
+      "basis": "West Hartford Town Hall (Hartford suburb)"
+    },
+    {
+      "state": "CT",
+      "locale": "rural",
+      "address": "74 West St, Litchfield, CT 06759",
+      "basis": "Litchfield Town Hall (Connecticut has no county government; small rural town)"
+    },
+    {
+      "state": "DE",
+      "locale": "urban",
+      "address": "800 N French St, Wilmington, DE 19801",
+      "basis": "Louis L. Redding City/County Building, Wilmington (largest city in Delaware)"
+    },
+    {
+      "state": "DE",
+      "locale": "suburban",
+      "address": "220 S Main St, Newark, DE 19711",
+      "basis": "Newark Municipal Building (Wilmington/Philadelphia metro suburb)"
+    },
+    {
+      "state": "DE",
+      "locale": "rural",
+      "address": "1 The Circle, Georgetown, DE 19947",
+      "basis": "Sussex County Courthouse"
+    },
+    {
+      "state": "DC",
+      "locale": "urban",
+      "address": "1350 Pennsylvania Ave NW, Washington, DC 20004",
+      "basis": "John A. Wilson Building (DC city hall)"
+    },
+    {
+      "state": "FL",
+      "locale": "urban",
+      "address": "117 W Duval St, Jacksonville, FL 32202",
+      "basis": "Jacksonville City Hall (largest city in Florida)"
+    },
+    {
+      "state": "FL",
+      "locale": "suburban",
+      "address": "405 Biltmore Way, Coral Gables, FL 33134",
+      "basis": "Coral Gables City Hall (Miami suburb)"
+    },
+    {
+      "state": "FL",
+      "locale": "rural",
+      "address": "120 W Main St, Mayo, FL 32066",
+      "basis": "Lafayette County Courthouse"
+    },
+    {
+      "state": "GA",
+      "locale": "urban",
+      "address": "55 Trinity Ave SW, Atlanta, GA 30303",
+      "basis": "Atlanta City Hall (largest city in Georgia)"
+    },
+    {
+      "state": "GA",
+      "locale": "suburban",
+      "address": "205 Lawrence St, Marietta, GA 30060",
+      "basis": "Marietta City Hall (Atlanta suburb)"
+    },
+    {
+      "state": "GA",
+      "locale": "rural",
+      "address": "111 Court Square, Blakely, GA 39823",
+      "basis": "Early County Courthouse"
+    },
+    {
+      "state": "HI",
+      "locale": "urban",
+      "address": "530 S King St, Honolulu, HI 96813",
+      "basis": "Honolulu Hale (city hall; largest city in Hawaii)"
+    },
+    {
+      "state": "HI",
+      "locale": "suburban",
+      "address": "45-829 Kamehameha Hwy, Kaneohe, HI 96744",
+      "basis": "Kaneohe Public Library (windward Oahu suburb of Honolulu)"
+    },
+    {
+      "state": "HI",
+      "locale": "rural",
+      "address": "25 Aupuni St, Hilo, HI 96720",
+      "basis": "Hawaii County Building, Hilo (county seat on the Big Island, far from the Honolulu metro)"
+    },
+    {
+      "state": "ID",
+      "locale": "urban",
+      "address": "150 N Capitol Blvd, Boise, ID 83702",
+      "basis": "Boise City Hall (largest city in Idaho)"
+    },
+    {
+      "state": "ID",
+      "locale": "suburban",
+      "address": "33 E Broadway Ave, Meridian, ID 83642",
+      "basis": "Meridian City Hall (Boise suburb)"
+    },
+    {
+      "state": "ID",
+      "locale": "rural",
+      "address": "206 Courthouse Dr, Salmon, ID 83467",
+      "basis": "Lemhi County Courthouse"
+    },
+    {
+      "state": "IL",
+      "locale": "urban",
+      "address": "121 N LaSalle St, Chicago, IL 60602",
+      "basis": "Chicago City Hall (largest city in Illinois)"
+    },
+    {
+      "state": "IL",
+      "locale": "suburban",
+      "address": "400 S Eagle St, Naperville, IL 60540",
+      "basis": "Naperville Municipal Center (Chicago suburb)"
+    },
+    {
+      "state": "IL",
+      "locale": "rural",
+      "address": "301 N Main St, Mount Carroll, IL 61053",
+      "basis": "Carroll County Courthouse"
+    },
+    {
+      "state": "IN",
+      "locale": "urban",
+      "address": "200 E Washington St, Indianapolis, IN 46204",
+      "basis": "Indianapolis City-County Building (largest city in Indiana)"
+    },
+    {
+      "state": "IN",
+      "locale": "suburban",
+      "address": "1 Civic Square, Carmel, IN 46032",
+      "basis": "Carmel City Hall (Indianapolis suburb)"
+    },
+    {
+      "state": "IN",
+      "locale": "rural",
+      "address": "116 W High St, Rockville, IN 47872",
+      "basis": "Parke County Courthouse"
+    },
+    {
+      "state": "IA",
+      "locale": "urban",
+      "address": "400 Robert D. Ray Dr, Des Moines, IA 50309",
+      "basis": "Des Moines City Hall (largest city in Iowa)"
+    },
+    {
+      "state": "IA",
+      "locale": "suburban",
+      "address": "4200 Mills Civic Pkwy, West Des Moines, IA 50265",
+      "basis": "West Des Moines City Hall (Des Moines suburb)"
+    },
+    {
+      "state": "IA",
+      "locale": "rural",
+      "address": "100 Courthouse Square, Bloomfield, IA 52537",
+      "basis": "Davis County Courthouse"
+    },
+    {
+      "state": "KS",
+      "locale": "urban",
+      "address": "455 N Main St, Wichita, KS 67202",
+      "basis": "Wichita City Hall (largest city in Kansas)"
+    },
+    {
+      "state": "KS",
+      "locale": "suburban",
+      "address": "8500 Santa Fe Dr, Overland Park, KS 66212",
+      "basis": "Overland Park City Hall (Kansas City suburb)"
+    },
+    {
+      "state": "KS",
+      "locale": "rural",
+      "address": "300 Pearl St, Cottonwood Falls, KS 66845",
+      "basis": "Chase County Courthouse"
+    },
+    {
+      "state": "KY",
+      "locale": "urban",
+      "address": "527 W Jefferson St, Louisville, KY 40202",
+      "basis": "Louisville Metro Hall (largest city in Kentucky)"
+    },
+    {
+      "state": "KY",
+      "locale": "suburban",
+      "address": "8100 Ewing Blvd, Florence, KY 41042",
+      "basis": "Florence Government Center (Cincinnati metro suburb)"
+    },
+    {
+      "state": "KY",
+      "locale": "rural",
+      "address": "117 E South St, Munfordville, KY 42765",
+      "basis": "Hart County Judicial Center"
+    },
+    {
+      "state": "LA",
+      "locale": "urban",
+      "address": "1300 Perdido St, New Orleans, LA 70112",
+      "basis": "New Orleans City Hall (largest city in Louisiana)"
+    },
+    {
+      "state": "LA",
+      "locale": "suburban",
+      "address": "1801 Williams Blvd, Kenner, LA 70062",
+      "basis": "Kenner City Hall (New Orleans suburb)"
+    },
+    {
+      "state": "LA",
+      "locale": "rural",
+      "address": "119 W Main St, Winnfield, LA 71483",
+      "basis": "Winn Parish Courthouse"
+    },
+    {
+      "state": "ME",
+      "locale": "urban",
+      "address": "389 Congress St, Portland, ME 04101",
+      "basis": "Portland City Hall (largest city in Maine)"
+    },
+    {
+      "state": "ME",
+      "locale": "suburban",
+      "address": "25 Cottage Rd, South Portland, ME 04106",
+      "basis": "South Portland City Hall (Portland suburb)"
+    },
+    {
+      "state": "ME",
+      "locale": "rural",
+      "address": "159 E Main St, Dover-Foxcroft, ME 04426",
+      "basis": "Piscataquis County Superior Courthouse"
+    },
+    {
+      "state": "MD",
+      "locale": "urban",
+      "address": "100 N Holliday St, Baltimore, MD 21202",
+      "basis": "Baltimore City Hall (largest city in Maryland)"
+    },
+    {
+      "state": "MD",
+      "locale": "suburban",
+      "address": "111 Maryland Ave, Rockville, MD 20850",
+      "basis": "Rockville City Hall (Washington DC suburb)"
+    },
+    {
+      "state": "MD",
+      "locale": "rural",
+      "address": "203 S 4th St, Oakland, MD 21550",
+      "basis": "Garrett County Circuit Courthouse"
+    },
+    {
+      "state": "MA",
+      "locale": "urban",
+      "address": "1 City Hall Square, Boston, MA 02201",
+      "basis": "Boston City Hall (largest city in Massachusetts)"
+    },
+    {
+      "state": "MA",
+      "locale": "suburban",
+      "address": "1000 Commonwealth Ave, Newton, MA 02459",
+      "basis": "Newton City Hall (Boston suburb)"
+    },
+    {
+      "state": "MA",
+      "locale": "rural",
+      "address": "425 Main St, Greenfield, MA 01301",
+      "basis": "Franklin County Courthouse, Greenfield"
+    },
+    {
+      "state": "MI",
+      "locale": "urban",
+      "address": "2 Woodward Ave, Detroit, MI 48226",
+      "basis": "Coleman A. Young Municipal Center, Detroit (largest city in Michigan)"
+    },
+    {
+      "state": "MI",
+      "locale": "suburban",
+      "address": "500 W Big Beaver Rd, Troy, MI 48084",
+      "basis": "Troy City Hall (Detroit suburb)"
+    },
+    {
+      "state": "MI",
+      "locale": "rural",
+      "address": "16 N 3rd St, L'Anse, MI 49946",
+      "basis": "Baraga County Courthouse"
+    },
+    {
+      "state": "MN",
+      "locale": "urban",
+      "address": "350 S 5th St, Minneapolis, MN 55415",
+      "basis": "Minneapolis City Hall (largest city in Minnesota)"
+    },
+    {
+      "state": "MN",
+      "locale": "suburban",
+      "address": "1800 W Old Shakopee Rd, Bloomington, MN 55431",
+      "basis": "Bloomington Civic Plaza (Minneapolis suburb)"
+    },
+    {
+      "state": "MN",
+      "locale": "rural",
+      "address": "411 W 2nd St, Grand Marais, MN 55604",
+      "basis": "Cook County Courthouse"
+    },
+    {
+      "state": "MS",
+      "locale": "urban",
+      "address": "219 S President St, Jackson, MS 39201",
+      "basis": "Jackson City Hall (largest city in Mississippi)"
+    },
+    {
+      "state": "MS",
+      "locale": "suburban",
+      "address": "100 W School St, Ridgeland, MS 39157",
+      "basis": "Ridgeland City Hall (Jackson suburb)"
+    },
+    {
+      "state": "MS",
+      "locale": "rural",
+      "address": "230 W Washington St, Kosciusko, MS 39090",
+      "basis": "Attala County Courthouse"
+    },
+    {
+      "state": "MO",
+      "locale": "urban",
+      "address": "414 E 12th St, Kansas City, MO 64106",
+      "basis": "Kansas City City Hall (largest city in Missouri)"
+    },
+    {
+      "state": "MO",
+      "locale": "suburban",
+      "address": "111 E Maple Ave, Independence, MO 64050",
+      "basis": "Independence City Hall (Kansas City suburb)"
+    },
+    {
+      "state": "MO",
+      "locale": "rural",
+      "address": "519 N Grand Ave, Houston, MO 65483",
+      "basis": "Texas County Courthouse"
+    },
+    {
+      "state": "MT",
+      "locale": "urban",
+      "address": "316 N 26th St, Billings, MT 59101",
+      "basis": "Billings City Hall (largest city in Montana; city hall relocated here in 2025)"
+    },
+    {
+      "state": "MT",
+      "locale": "suburban",
+      "address": "115 W 1st St, Laurel, MT 59044",
+      "basis": "Laurel City Hall (Billings metro suburb)"
+    },
+    {
+      "state": "MT",
+      "locale": "rural",
+      "address": "400 Ohio St, Chinook, MT 59523",
+      "basis": "Blaine County Courthouse"
+    },
+    {
+      "state": "NE",
+      "locale": "urban",
+      "address": "1819 Farnam St, Omaha, NE 68183",
+      "basis": "Omaha-Douglas Civic Center (city hall; largest city in Nebraska)"
+    },
+    {
+      "state": "NE",
+      "locale": "suburban",
+      "address": "1500 Wall St, Bellevue, NE 68005",
+      "basis": "Bellevue City Hall (Omaha suburb)"
+    },
+    {
+      "state": "NE",
+      "locale": "rural",
+      "address": "604 Heritage Dr, Broken Bow, NE 68822",
+      "basis": "Custer County Court (per Nebraska Judicial Branch; historic courthouse is at 431 S 10th Ave)"
+    },
+    {
+      "state": "NV",
+      "locale": "urban",
+      "address": "495 S Main St, Las Vegas, NV 89101",
+      "basis": "Las Vegas City Hall (largest city in Nevada)"
+    },
+    {
+      "state": "NV",
+      "locale": "suburban",
+      "address": "240 S Water St, Henderson, NV 89015",
+      "basis": "Henderson City Hall (Las Vegas suburb)"
+    },
+    {
+      "state": "NV",
+      "locale": "rural",
+      "address": "10 S Main St, Eureka, NV 89316",
+      "basis": "Eureka County Courthouse"
+    },
+    {
+      "state": "NH",
+      "locale": "urban",
+      "address": "1 City Hall Plaza, Manchester, NH 03101",
+      "basis": "Manchester City Hall (largest city in New Hampshire)"
+    },
+    {
+      "state": "NH",
+      "locale": "suburban",
+      "address": "229 Main St, Nashua, NH 03060",
+      "basis": "Nashua City Hall (Boston metro area city)"
+    },
+    {
+      "state": "NH",
+      "locale": "rural",
+      "address": "55 School St, Lancaster, NH 03584",
+      "basis": "Coos County Courthouse"
+    },
+    {
+      "state": "NJ",
+      "locale": "urban",
+      "address": "920 Broad St, Newark, NJ 07102",
+      "basis": "Newark City Hall (largest city in New Jersey)"
+    },
+    {
+      "state": "NJ",
+      "locale": "suburban",
+      "address": "100 Municipal Blvd, Edison, NJ 08817",
+      "basis": "Edison Township Municipal Complex (New York metro suburb)"
+    },
+    {
+      "state": "NJ",
+      "locale": "rural",
+      "address": "92 Market St, Salem, NJ 08079",
+      "basis": "Salem County Courthouse"
+    },
+    {
+      "state": "NM",
+      "locale": "urban",
+      "address": "1 Civic Plaza NW, Albuquerque, NM 87102",
+      "basis": "Albuquerque City Hall (largest city in New Mexico)"
+    },
+    {
+      "state": "NM",
+      "locale": "suburban",
+      "address": "3200 Civic Center Circle NE, Rio Rancho, NM 87144",
+      "basis": "Rio Rancho City Hall (Albuquerque suburb)"
+    },
+    {
+      "state": "NM",
+      "locale": "rural",
+      "address": "514 Avenue C, Fort Sumner, NM 88119",
+      "basis": "De Baca County Courthouse (per 10th Judicial District court listings; some sources cite 248 E Avenue C)"
+    },
+    {
+      "state": "NY",
+      "locale": "urban",
+      "address": "476 5th Ave, New York, NY 10018",
+      "basis": "New York Public Library, Stephen A. Schwarzman Building (NYC City Hall has no numbered street address)"
+    },
+    {
+      "state": "NY",
+      "locale": "suburban",
+      "address": "40 S Broadway, Yonkers, NY 10701",
+      "basis": "Yonkers City Hall (New York City suburb)"
+    },
+    {
+      "state": "NY",
+      "locale": "rural",
+      "address": "102 County View Dr, Lake Pleasant, NY 12108",
+      "basis": "Hamilton County Courthouse (Route 8)"
+    },
+    {
+      "state": "NC",
+      "locale": "urban",
+      "address": "600 E 4th St, Charlotte, NC 28202",
+      "basis": "Charlotte-Mecklenburg Government Center (largest city in North Carolina)"
+    },
+    {
+      "state": "NC",
+      "locale": "suburban",
+      "address": "316 N Academy St, Cary, NC 27513",
+      "basis": "Cary Town Hall (Raleigh suburb)"
+    },
+    {
+      "state": "NC",
+      "locale": "rural",
+      "address": "328 Longview Dr, Bakersville, NC 28705",
+      "basis": "Mitchell County Courthouse"
+    },
+    {
+      "state": "ND",
+      "locale": "urban",
+      "address": "225 4th St N, Fargo, ND 58102",
+      "basis": "Fargo City Hall (largest city in North Dakota)"
+    },
+    {
+      "state": "ND",
+      "locale": "suburban",
+      "address": "2515 6th St E, West Fargo, ND 58078",
+      "basis": "West Fargo City Hall (Fargo suburb; city hall relocated here in 2024)"
+    },
+    {
+      "state": "ND",
+      "locale": "rural",
+      "address": "700 Railway St N, Fessenden, ND 58438",
+      "basis": "Wells County Courthouse"
+    },
+    {
+      "state": "OH",
+      "locale": "urban",
+      "address": "90 W Broad St, Columbus, OH 43215",
+      "basis": "Columbus City Hall (largest city in Ohio)"
+    },
+    {
+      "state": "OH",
+      "locale": "suburban",
+      "address": "6611 Ridge Rd, Parma, OH 44129",
+      "basis": "Parma City Hall (Cleveland suburb)"
+    },
+    {
+      "state": "OH",
+      "locale": "rural",
+      "address": "100 E 2nd St, Pomeroy, OH 45769",
+      "basis": "Meigs County Courthouse"
+    },
+    {
+      "state": "OK",
+      "locale": "urban",
+      "address": "200 N Walker Ave, Oklahoma City, OK 73102",
+      "basis": "Oklahoma City City Hall (largest city in Oklahoma)"
+    },
+    {
+      "state": "OK",
+      "locale": "suburban",
+      "address": "220 S 1st St, Broken Arrow, OK 74012",
+      "basis": "Broken Arrow City Hall (Tulsa suburb)"
+    },
+    {
+      "state": "OK",
+      "locale": "rural",
+      "address": "500 E Broadway, Cheyenne, OK 73628",
+      "basis": "Roger Mills County Courthouse"
+    },
+    {
+      "state": "OR",
+      "locale": "urban",
+      "address": "1221 SW 4th Ave, Portland, OR 97204",
+      "basis": "Portland City Hall (largest city in Oregon)"
+    },
+    {
+      "state": "OR",
+      "locale": "suburban",
+      "address": "12725 SW Millikan Way, Beaverton, OR 97005",
+      "basis": "Beaverton City Hall / The Beaverton Building (Portland suburb)"
+    },
+    {
+      "state": "OR",
+      "locale": "rural",
+      "address": "701 Adams St, Fossil, OR 97830",
+      "basis": "Wheeler County Courthouse"
+    },
+    {
+      "state": "PA",
+      "locale": "urban",
+      "address": "1400 John F. Kennedy Blvd, Philadelphia, PA 19107",
+      "basis": "Philadelphia City Hall (largest city in Pennsylvania)"
+    },
+    {
+      "state": "PA",
+      "locale": "suburban",
+      "address": "100 Garrett Rd, Upper Darby, PA 19082",
+      "basis": "Upper Darby Township Municipal Building (Philadelphia suburb)"
+    },
+    {
+      "state": "PA",
+      "locale": "rural",
+      "address": "1 E 2nd St, Coudersport, PA 16915",
+      "basis": "Potter County Courthouse"
+    },
+    {
+      "state": "RI",
+      "locale": "urban",
+      "address": "25 Dorrance St, Providence, RI 02903",
+      "basis": "Providence City Hall (largest city in Rhode Island)"
+    },
+    {
+      "state": "RI",
+      "locale": "suburban",
+      "address": "869 Park Ave, Cranston, RI 02910",
+      "basis": "Cranston City Hall (Providence suburb)"
+    },
+    {
+      "state": "RI",
+      "locale": "rural",
+      "address": "16 Old Town Rd, New Shoreham, RI 02807",
+      "basis": "New Shoreham Town Hall, Block Island (Rhode Island has no county government)"
+    },
+    {
+      "state": "SC",
+      "locale": "urban",
+      "address": "80 Broad St, Charleston, SC 29401",
+      "basis": "Charleston City Hall (largest city in South Carolina)"
+    },
+    {
+      "state": "SC",
+      "locale": "suburban",
+      "address": "100 Ann Edwards Ln, Mount Pleasant, SC 29464",
+      "basis": "Mount Pleasant Town Hall (Charleston suburb)"
+    },
+    {
+      "state": "SC",
+      "locale": "rural",
+      "address": "133 S Mine St, McCormick, SC 29835",
+      "basis": "McCormick County Courthouse"
+    },
+    {
+      "state": "SD",
+      "locale": "urban",
+      "address": "224 W 9th St, Sioux Falls, SD 57104",
+      "basis": "Sioux Falls City Hall (largest city in South Dakota)"
+    },
+    {
+      "state": "SD",
+      "locale": "suburban",
+      "address": "304 S Main Ave, Brandon, SD 57005",
+      "basis": "Brandon City Hall (Sioux Falls suburb)"
+    },
+    {
+      "state": "SD",
+      "locale": "rural",
+      "address": "300 S Maine St, Kennebec, SD 57544",
+      "basis": "Lyman County Courthouse (street is spelled Maine St)"
+    },
+    {
+      "state": "TN",
+      "locale": "urban",
+      "address": "1 Public Square, Nashville, TN 37201",
+      "basis": "Metropolitan Courthouse / Nashville City Hall (largest city in Tennessee)"
+    },
+    {
+      "state": "TN",
+      "locale": "suburban",
+      "address": "109 3rd Ave S, Franklin, TN 37064",
+      "basis": "Franklin City Hall (Nashville suburb)"
+    },
+    {
+      "state": "TN",
+      "locale": "rural",
+      "address": "1 Courthouse Square, Byrdstown, TN 38549",
+      "basis": "Pickett County Courthouse"
+    },
+    {
+      "state": "TX",
+      "locale": "urban",
+      "address": "901 Bagby St, Houston, TX 77002",
+      "basis": "Houston City Hall (largest city in Texas)"
+    },
+    {
+      "state": "TX",
+      "locale": "suburban",
+      "address": "1520 K Ave, Plano, TX 75074",
+      "basis": "Plano Municipal Center (Dallas suburb)"
+    },
+    {
+      "state": "TX",
+      "locale": "rural",
+      "address": "300 Highland St, Marfa, TX 79843",
+      "basis": "Presidio County Courthouse (per county website; often listed as N Highland Ave)"
+    },
+    {
+      "state": "UT",
+      "locale": "urban",
+      "address": "451 S State St, Salt Lake City, UT 84111",
+      "basis": "Salt Lake City and County Building (largest city in Utah)"
+    },
+    {
+      "state": "UT",
+      "locale": "suburban",
+      "address": "10000 Centennial Pkwy, Sandy, UT 84070",
+      "basis": "Sandy City Hall (Salt Lake City suburb)"
+    },
+    {
+      "state": "UT",
+      "locale": "rural",
+      "address": "55 S Main St, Panguitch, UT 84759",
+      "basis": "Garfield County Courthouse"
+    },
+    {
+      "state": "VT",
+      "locale": "urban",
+      "address": "149 Church St, Burlington, VT 05401",
+      "basis": "Burlington City Hall (largest city in Vermont)"
+    },
+    {
+      "state": "VT",
+      "locale": "suburban",
+      "address": "180 Market St, South Burlington, VT 05403",
+      "basis": "South Burlington City Hall (Burlington suburb)"
+    },
+    {
+      "state": "VT",
+      "locale": "rural",
+      "address": "75 Courthouse Dr, Guildhall, VT 05905",
+      "basis": "Essex County Courthouse"
+    },
+    {
+      "state": "VA",
+      "locale": "urban",
+      "address": "2401 Courthouse Dr, Virginia Beach, VA 23456",
+      "basis": "Virginia Beach City Hall (largest city in Virginia)"
+    },
+    {
+      "state": "VA",
+      "locale": "suburban",
+      "address": "301 King St, Alexandria, VA 22314",
+      "basis": "Alexandria City Hall (Washington DC suburb)"
+    },
+    {
+      "state": "VA",
+      "locale": "rural",
+      "address": "165 W Main St, Monterey, VA 24465",
+      "basis": "Highland County Courthouse"
+    },
+    {
+      "state": "WA",
+      "locale": "urban",
+      "address": "600 4th Ave, Seattle, WA 98104",
+      "basis": "Seattle City Hall (largest city in Washington)"
+    },
+    {
+      "state": "WA",
+      "locale": "suburban",
+      "address": "450 110th Ave NE, Bellevue, WA 98004",
+      "basis": "Bellevue City Hall (Seattle suburb)"
+    },
+    {
+      "state": "WA",
+      "locale": "rural",
+      "address": "789 Main St, Pomeroy, WA 99347",
+      "basis": "Garfield County Courthouse"
+    },
+    {
+      "state": "WV",
+      "locale": "urban",
+      "address": "501 Virginia St E, Charleston, WV 25301",
+      "basis": "Charleston City Hall (largest city in West Virginia)"
+    },
+    {
+      "state": "WV",
+      "locale": "suburban",
+      "address": "238 4th Ave, South Charleston, WV 25303",
+      "basis": "South Charleston City Hall (Charleston suburb)"
+    },
+    {
+      "state": "WV",
+      "locale": "rural",
+      "address": "100 S Main St, Franklin, WV 26807",
+      "basis": "Pendleton County Courthouse"
+    },
+    {
+      "state": "WI",
+      "locale": "urban",
+      "address": "200 E Wells St, Milwaukee, WI 53202",
+      "basis": "Milwaukee City Hall (largest city in Wisconsin)"
+    },
+    {
+      "state": "WI",
+      "locale": "suburban",
+      "address": "201 Delafield St, Waukesha, WI 53188",
+      "basis": "Waukesha City Hall (Milwaukee suburb)"
+    },
+    {
+      "state": "WI",
+      "locale": "rural",
+      "address": "501 Lake Ave, Florence, WI 54121",
+      "basis": "Florence County Courthouse"
+    },
+    {
+      "state": "WY",
+      "locale": "urban",
+      "address": "2101 O'Neil Ave, Cheyenne, WY 82001",
+      "basis": "Cheyenne Municipal Building (largest city in Wyoming)"
+    },
+    {
+      "state": "WY",
+      "locale": "suburban",
+      "address": "704 4th St, Mills, WY 82644",
+      "basis": "Mills Town Hall (Casper metro; Wyoming's closest analog to a suburb)"
+    },
+    {
+      "state": "WY",
+      "locale": "rural",
+      "address": "424 S Elm St, Lusk, WY 82225",
+      "basis": "Niobrara County Courthouse"
+    }
+  ]
+}

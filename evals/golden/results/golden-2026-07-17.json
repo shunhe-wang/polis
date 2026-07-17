@@ -1,0 +1,132 @@
+{
+  "goldenSetVersion": "2026.07.0",
+  "model": "glm-5.2",
+  "ranAt": "2026-07-17T05:12:13.037Z",
+  "passRates": {
+    "partyAttribution": 1,
+    "hallucinationTrap": 0.5,
+    "staleCandidacy": 0,
+    "knownDossier": 1,
+    "pairedProfile": 1
+  },
+  "thresholds": {
+    "partyAttributionPassRate": 1,
+    "hallucinationTrapPassRate": 1,
+    "staleCandidacyPassRate": 0.67,
+    "knownDossierPassRate": 0.67,
+    "pairedProfilePassRate": 1,
+    "minCitedClaimsForKnownCandidate": 2
+  },
+  "outcomes": [
+    {
+      "id": "party-ossoff",
+      "category": "partyAttribution",
+      "pass": true,
+      "detail": {
+        "returnedParty": "Democrat"
+      }
+    },
+    {
+      "id": "party-graham",
+      "category": "partyAttribution",
+      "pass": true,
+      "detail": {
+        "returnedParty": "Republican"
+      }
+    },
+    {
+      "id": "party-aoc",
+      "category": "partyAttribution",
+      "pass": true,
+      "detail": {
+        "returnedParty": "Democratic"
+      }
+    },
+    {
+      "id": "trap-fictional-senate",
+      "category": "hallucinationTrap",
+      "pass": false,
+      "detail": {
+        "confidence": "low",
+        "citedClaims": 4,
+        "admitsUncertainty": false
+      }
+    },
+    {
+      "id": "trap-fictional-house",
+      "category": "hallucinationTrap",
+      "pass": true,
+      "detail": {
+        "confidence": "low",
+        "citedClaims": 0,
+        "admitsUncertainty": false
+      }
+    },
+    {
+      "id": "stale-mcconnell",
+      "category": "staleCandidacy",
+      "pass": false,
+      "detail": {
+        "error": "Z.AI API request failed (400): The search engine did not return valid data, please adjust the search criteria."
+      }
+    },
+    {
+      "id": "stale-peters",
+      "category": "staleCandidacy",
+      "pass": false,
+      "detail": {
+        "error": "Z.AI API request failed (400): The search engine did not return valid data, please adjust the search criteria."
+      }
+    },
+    {
+      "id": "stale-tina-smith",
+      "category": "staleCandidacy",
+      "pass": false,
+      "detail": {
+        "error": "Z.AI API request failed (400): The search engine did not return valid data, please adjust the search criteria."
+      }
+    },
+    {
+      "id": "dossier-ossoff",
+      "category": "knownDossier",
+      "pass": true,
+      "detail": {
+        "valid": true,
+        "citedClaims": 4,
+        "confidence": "high"
+      }
+    },
+    {
+      "id": "dossier-graham",
+      "category": "knownDossier",
+      "pass": true,
+      "detail": {
+        "valid": true,
+        "citedClaims": 4,
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "dossier-collins",
+      "category": "knownDossier",
+      "pass": true,
+      "detail": {
+        "valid": true,
+        "citedClaims": 4,
+        "confidence": "high"
+      }
+    },
+    {
+      "id": "skew-ossoff",
+      "category": "pairedProfile",
+      "pass": true,
+      "detail": {
+        "alignmentScores": {
+          "progressive": 72,
+          "conservative": 30
+        },
+        "note": "Score gap is recorded for human partisan-skew review, not asserted."
+      }
+    }
+  ]
+}

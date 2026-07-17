@@ -6,6 +6,7 @@ import {
   getStarterAnalysisIpQuotaRules,
   getStarterAnalysisRemaining,
   enforceQuotaRules,
+  refundStarterAnalysisReservation,
 } from "@/lib/ai-quotas";
 import {
   isZaiConfigured,
@@ -189,6 +190,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const admin = createAdminClient();
+  let reservedStarter = false;
+  const refundReservation = async () => {
+    if (!reservedStarter || !admin) return;
+    try {
+      await refundStarterAnalysisReservation(admin, user.id);
+    } catch {
+      // Best-effort refund only; the persisted analysis row remains the
+      // durable per-account gate.
+    }
+  };
+
   try {
     const ipQuotaFailure = await enforceQuotaRules(
       supabase,
@@ -205,11 +218,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check remaining without consuming yet. The free starter analysis is only
-    // reserved after a valid result is produced (see below), so a failed AI
-    // call never burns the user's single free analysis.
-    const remainingBefore = await getStarterAnalysisRemaining(supabase);
-    if (remainingBefore <= 0) {
+    // Atomically reserve the free starter analysis before any paid AI work so
+    // concurrent requests cannot all pass a read-only check and each receive a
+    // free analysis. Failure paths refund the reservation so a failed AI call
+    // never burns the user's single free analysis.
+    const starterQuotaFailure = await enforceStarterAnalysisQuota(supabase);
+    if (starterQuotaFailure) {
       await recordAppEvent({
         category: "research",
         event: "starter_quota_reached",
@@ -226,6 +240,7 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+    reservedStarter = true;
   } catch (error) {
     await recordAppEvent({
       category: "research",
@@ -258,7 +273,6 @@ export async function POST(request: NextRequest) {
       state: body.state,
       profile: body.valuesProfile,
     };
-    const admin = createAdminClient();
     const dossierKey = buildCandidateDossierKey(
       body.candidate,
       body.race,
@@ -293,6 +307,7 @@ export async function POST(request: NextRequest) {
           route: "/api/starter-analysis",
           userId: user.id,
         });
+        await refundReservation();
         return NextResponse.json(
           { error: "Starter analysis returned an invalid dossier" },
           { status: 502 }
@@ -338,22 +353,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isValidCandidateResult(sanitizedResult)) {
+      await refundReservation();
       return NextResponse.json(
         { error: "Starter analysis returned an invalid result" },
         { status: 502 }
       );
-    }
-
-    // Reserve the free starter analysis only now that a valid result exists, so
-    // a failed or invalid AI response never consumes the user's single free
-    // analysis. Best-effort: the starter_candidate_analyses upsert below is the
-    // durable per-account gate, so a reservation hiccup must not discard a valid
-    // result. If a concurrent request already reserved it, the account simply
-    // shows 0 remaining.
-    try {
-      await enforceStarterAnalysisQuota(supabase);
-    } catch {
-      // Ignore reservation errors; the persisted analysis row gates re-runs.
     }
 
     const starterAnalysesRemaining =
@@ -401,13 +405,9 @@ export async function POST(request: NextRequest) {
           error instanceof Error ? error.message : "Starter analysis failed",
       },
     });
+    await refundReservation();
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Starter analysis failed",
-      },
+      { error: "Starter analysis is unavailable right now. Try again shortly." },
       { status: 502 }
     );
   }

@@ -13,16 +13,33 @@ function required(env: MobileEnv, key: string): string {
   return value;
 }
 
-export function parseMobileConfig(env: MobileEnv): MobileConfig {
-  const apiUrl = new URL(required(env, "VITE_POLIS_API_URL"));
-  const isLocal = apiUrl.hostname === "localhost" || apiUrl.hostname === "127.0.0.1";
-  if (apiUrl.protocol !== "https:" && !isLocal) {
-    throw new Error("VITE_POLIS_API_URL must use HTTPS outside local development");
+function requiredHttpsUrl(env: MobileEnv, key: string): URL {
+  let url: URL;
+  try {
+    url = new URL(required(env, key));
+  } catch (error) {
+    if (error instanceof Error && error.message.endsWith("is required")) {
+      throw error;
+    }
+    throw new Error(`${key} must be a valid URL`);
   }
+  const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol !== "https:" && !isLocal) {
+    throw new Error(`${key} must use HTTPS outside local development`);
+  }
+  return url;
+}
+
+export function parseMobileConfig(env: MobileEnv): MobileConfig {
+  // iOS App Transport Security blocks cleartext requests at runtime with an
+  // opaque failure; validating both endpoints at startup surfaces a clear
+  // configuration error instead.
+  const apiUrl = requiredHttpsUrl(env, "VITE_POLIS_API_URL");
+  const supabaseUrl = requiredHttpsUrl(env, "VITE_SUPABASE_URL");
 
   return {
     apiUrl: apiUrl.origin,
-    supabaseUrl: required(env, "VITE_SUPABASE_URL"),
+    supabaseUrl: supabaseUrl.origin,
     supabaseAnonKey: required(env, "VITE_SUPABASE_ANON_KEY"),
     storeKitProductId: required(env, "VITE_STOREKIT_PRODUCT_ID"),
   };

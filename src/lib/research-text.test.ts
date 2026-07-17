@@ -151,3 +151,51 @@ describe("research text sanitization", () => {
     expect(result.reasoning).toBe("Reasoning text.");
   });
 });
+
+describe("sanitizing structurally malformed AI output", () => {
+  it("passes malformed dossiers through for the validator to reject", () => {
+    const missingArrays = {
+      name: "X",
+      race: "Y",
+      state: "NY",
+      overview: "Text",
+      confidence: "low",
+    };
+    expect(() =>
+      sanitizeCandidateDossier(missingArrays as never)
+    ).not.toThrow();
+    expect(
+      isValidCandidateDossier(sanitizeCandidateDossier(missingArrays as never))
+    ).toBe(false);
+  });
+
+  it("tolerates null claim text and non-object claims", () => {
+    const dossier = {
+      name: "X",
+      party: null,
+      race: "Y",
+      state: "NY",
+      overview: "Text",
+      issueEvidence: [],
+      strengths: [
+        { text: null, sourceUrl: "https://example.com", sourceTitle: "T" },
+        "not-an-object",
+        { text: "Valid", sourceUrl: "https://example.com", sourceTitle: "T" },
+      ],
+      concerns: [],
+      confidence: "low",
+    };
+    const sanitized = sanitizeCandidateDossier(dossier as never);
+    expect(sanitized.strengths).toHaveLength(1);
+    expect(sanitized.strengths[0].text).toBe("Valid");
+    expect(isValidCandidateDossier(sanitized)).toBe(true);
+  });
+
+  it("tolerates non-object results and non-string fields", () => {
+    expect(() => sanitizeCandidateResult(null as never)).not.toThrow();
+    expect(() => sanitizeMeasureResult(42 as never)).not.toThrow();
+    expect(() =>
+      sanitizeCandidateResult({ reasoning: 7, likes: {} } as never)
+    ).not.toThrow();
+  });
+});

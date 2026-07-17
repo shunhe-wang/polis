@@ -1,4 +1,4 @@
-import { registerPlugin } from "@capacitor/core";
+import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 
 export interface StoreKitProduct {
   id: string;
@@ -24,6 +24,12 @@ export interface StoreKitBridge {
   }): Promise<PurchaseResult>;
   getUnfinishedTransactions(): Promise<{ transactions: PurchasedTransaction[] }>;
   finish(options: { transactionId: string }): Promise<void>;
+  // Fired by the native Transaction.updates listener for purchases that
+  // complete outside the in-app flow (Ask to Buy approvals, offer codes).
+  addListener(
+    eventName: "transactionUpdated",
+    listener: (transaction: PurchasedTransaction) => void
+  ): Promise<PluginListenerHandle>;
 }
 
 export const StoreKit = registerPlugin<StoreKitBridge>("PolisStoreKit");
@@ -60,9 +66,15 @@ export async function fulfillPurchasedTransaction(input: {
     throw new Error(body?.error ?? "Could not deliver this Election Pass");
   }
 
-  await (input.storeKit ?? StoreKit).finish({
-    transactionId: input.transaction.transactionId,
-  });
+  try {
+    await (input.storeKit ?? StoreKit).finish({
+      transactionId: input.transaction.transactionId,
+    });
+  } catch {
+    // The pass is already delivered server-side. Leaving the transaction
+    // unfinished is safe: the relaunch retry re-submits it, the server
+    // answers alreadyFulfilled, and finish() runs again.
+  }
   return body as FulfillmentResponse;
 }
 
@@ -92,13 +104,20 @@ export async function retryUnfinishedTransactions(input: {
   apiUrl: string;
   accessToken: string;
   storeKit?: StoreKitBridge;
+  fetcher?: typeof fetch;
 }): Promise<number> {
   const storeKit = input.storeKit ?? StoreKit;
   const { transactions } = await storeKit.getUnfinishedTransactions();
   let delivered = 0;
   for (const transaction of transactions) {
-    await fulfillPurchasedTransaction({ ...input, transaction, storeKit });
-    delivered += 1;
+    try {
+      await fulfillPurchasedTransaction({ ...input, transaction, storeKit });
+      delivered += 1;
+    } catch {
+      // A transaction the server rejects (for example one that belongs to a
+      // different signed-in account) must not block delivery of the ones
+      // behind it. It stays unfinished and is retried on the next launch.
+    }
   }
   return delivered;
 }

@@ -74,7 +74,7 @@ export default async function AdminPage() {
 
   const dashboard = await loadAdminDashboardData(admin);
   const reconciliationIssues =
-    dashboard.unfulfilledOrders + dashboard.unfulfilledAppStoreTransactions;
+    dashboard.unfulfilledOrders + dashboard.appStoreFulfillmentFailures24h;
 
   return (
     <main className="flex flex-1 flex-col items-center px-4 py-8 sm:py-16">
@@ -202,7 +202,7 @@ export default async function AdminPage() {
                 : "Billing reconciled"}
             </Badge>
           </div>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-7">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard
               label="Stripe Paid Orders"
               value={dashboard.paidOrders24h}
@@ -224,14 +224,53 @@ export default async function AdminPage() {
               value={dashboard.appStoreCreditsGranted24h}
             />
             <StatCard
-              label="Unfulfilled StoreKit"
-              value={dashboard.unfulfilledAppStoreTransactions}
+              label="StoreKit Failures (24h)"
+              value={dashboard.appStoreFulfillmentFailures24h}
+            />
+            <StatCard
+              label="Refunds/Revocations (24h)"
+              value={dashboard.purchaseRevocations24h}
             />
             <StatCard
               label="Recorded Quota Denials"
               value={dashboard.recordedQuotaDenials24h}
             />
           </div>
+        </section>
+
+        <Separator className="my-8" />
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold">Content Reports</h2>
+            <Badge
+              variant={
+                dashboard.openContentReports > 0 ? "destructive" : "secondary"
+              }
+            >
+              {dashboard.openContentReports > 0
+                ? `${dashboard.openContentReports} open report${dashboard.openContentReports === 1 ? "" : "s"}`
+                : "No open reports"}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+            <StatCard
+              label="Open Reports"
+              value={dashboard.openContentReports}
+            />
+            <StatCard
+              label="Oldest Open Report"
+              value={
+                dashboard.oldestOpenContentReportAt
+                  ? formatTimestamp(dashboard.oldestOpenContentReportAt)
+                  : "None"
+              }
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            User-submitted corrections for election content. Triage per the
+            data-correction runbook in docs/runbooks/data-correction.md.
+          </p>
         </section>
 
         <Separator className="my-8" />

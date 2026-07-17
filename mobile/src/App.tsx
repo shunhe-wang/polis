@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchAccountSummary, type MobileAccountSummary } from "./lib/api";
 import { getMobileConfig, type MobileConfig } from "./lib/config";
 import {
+  fulfillPurchasedTransaction,
   purchaseElectionPass,
   retryUnfinishedTransactions,
   StoreKit,
@@ -75,6 +76,34 @@ function ConfiguredApp({ config }: { config: MobileConfig }) {
         })
         .catch(() => setMessage("A previous purchase will retry when the service is available."));
     }
+  }, [session]);
+
+  // Deliver purchases that complete outside the in-app flow, such as Ask to
+  // Buy approvals that arrive minutes after the purchase sheet was dismissed.
+  useEffect(() => {
+    if (!session || Capacitor.getPlatform() !== "ios") return;
+    const handlePromise = StoreKit.addListener(
+      "transactionUpdated",
+      (transaction) => {
+        void fulfillPurchasedTransaction({
+          apiUrl: config.apiUrl,
+          accessToken: session.access_token,
+          transaction,
+        })
+          .then(async () => {
+            await refreshAccount(session);
+            setMessage("Election Pass added.");
+          })
+          .catch(() => {
+            setMessage(
+              "A purchase could not be delivered yet. It will retry on the next launch."
+            );
+          });
+      }
+    );
+    return () => {
+      void handlePromise.then((handle) => handle.remove());
+    };
   }, [session]);
 
   async function signIn(event: React.FormEvent) {

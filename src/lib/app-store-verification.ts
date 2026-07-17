@@ -4,6 +4,7 @@ import {
   Environment,
   SignedDataVerifier,
   type JWSTransactionDecodedPayload,
+  type ResponseBodyV2DecodedPayload,
 } from "@apple/app-store-server-library";
 
 function getEnvironment(value: string | undefined): Environment {
@@ -20,14 +21,13 @@ function configurationError(message: string): Error {
   return error;
 }
 
-function createVerifier(): SignedDataVerifier {
+function createVerifier(environment: Environment): SignedDataVerifier {
   const bundleId = process.env.APPLE_BUNDLE_ID?.trim();
   const rootCertificates = (process.env.APPLE_ROOT_CA_CERTS_BASE64 ?? "")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean)
     .map((value) => Buffer.from(value, "base64"));
-  const environment = getEnvironment(process.env.APPLE_IAP_ENVIRONMENT);
 
   if (!bundleId || rootCertificates.length === 0) {
     throw configurationError(
@@ -65,5 +65,56 @@ function createVerifier(): SignedDataVerifier {
 export async function verifyAppStoreTransaction(
   signedTransaction: string
 ): Promise<JWSTransactionDecodedPayload> {
-  return createVerifier().verifyAndDecodeTransaction(signedTransaction);
+  const configuredEnvironment = getEnvironment(
+    process.env.APPLE_IAP_ENVIRONMENT
+  );
+
+  try {
+    return await createVerifier(configuredEnvironment).verifyAndDecodeTransaction(
+      signedTransaction
+    );
+  } catch (error) {
+    // App Review and TestFlight purchases are made in the Sandbox environment
+    // against the production backend, so a production server must fall back to
+    // sandbox verification. A forged payload fails signature verification in
+    // both environments; only the environment claim differs for honest
+    // sandbox transactions.
+    if (configuredEnvironment === Environment.PRODUCTION) {
+      try {
+        return await createVerifier(
+          Environment.SANDBOX
+        ).verifyAndDecodeTransaction(signedTransaction);
+      } catch {
+        throw error;
+      }
+    }
+    throw error;
+  }
+}
+
+export async function verifyAppStoreNotification(
+  signedPayload: string
+): Promise<ResponseBodyV2DecodedPayload> {
+  const configuredEnvironment = getEnvironment(
+    process.env.APPLE_IAP_ENVIRONMENT
+  );
+
+  try {
+    return await createVerifier(
+      configuredEnvironment
+    ).verifyAndDecodeNotification(signedPayload);
+  } catch (error) {
+    // Sandbox notifications (App Review, TestFlight) can reach the production
+    // notification URL; mirror the transaction-verification fallback.
+    if (configuredEnvironment === Environment.PRODUCTION) {
+      try {
+        return await createVerifier(
+          Environment.SANDBOX
+        ).verifyAndDecodeNotification(signedPayload);
+      } catch {
+        throw error;
+      }
+    }
+    throw error;
+  }
 }

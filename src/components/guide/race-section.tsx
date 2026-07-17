@@ -135,6 +135,7 @@ export function RaceSection({
             <CandidateCard
               key={candidate.candidateId}
               result={candidate}
+              raceName={raceName}
               isRecommended={
                 hasStrongRecommendation === true &&
                 candidate.candidateId === recommended?.candidateId

@@ -64,6 +64,19 @@ export async function POST(request: Request) {
 
   const trust = getAccountTrustStatus(user);
   if (!trust.trusted) {
+    // At this point StoreKit has already charged the customer, so a blocked
+    // fulfillment must be loudly visible for manual reconciliation.
+    await recordAppEvent({
+      category: "billing",
+      event: "app_store_transaction_failed",
+      severity: "error",
+      route: ROUTE,
+      userId: user.id,
+      details: {
+        message: "Paid App Store transaction blocked by the account trust gate",
+        reason: trust.reason,
+      },
+    });
     return respond({ error: trust.reason }, 403);
   }
 

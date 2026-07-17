@@ -12,6 +12,7 @@ import {
   isDeterministicOfficeLookup,
 } from "@/lib/deterministic-candidate-lookup";
 import { getSameOriginError } from "@/lib/csrf";
+import { recordAppEvent } from "@/lib/observability";
 import { isZaiConfigured, lookupCandidatesWithZai } from "@/lib/zai";
 import {
   AI_CONSENT_REQUIRED_PAYLOAD,
@@ -213,11 +214,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const isQuotaConfigError =
       err instanceof Error &&
       err.message.includes("AI quota functions are not installed");
+    await recordAppEvent({
+      category: "research",
+      event: "candidate_lookup_failed",
+      severity: "error",
+      route: "/api/candidates",
+      details: {
+        message:
+          err instanceof Error ? err.message : "Failed to look up candidates",
+      },
+    });
     const message = isAbort
       ? "Candidate lookup timed out after 30 seconds"
-      : err instanceof Error
-        ? err.message
-        : "Failed to look up candidates";
+      : isQuotaConfigError
+        ? "Candidate lookup is not fully configured. Try again later."
+        : "Failed to look up candidates. Please try again.";
     return NextResponse.json(
       { candidates: [], error: message } satisfies CandidateLookupResult,
       { status: isAbort ? 504 : isQuotaConfigError ? 503 : 502 }
