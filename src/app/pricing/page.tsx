@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DEFAULT_ACCOUNT_SUMMARY, type AccountSummary } from "@/lib/freemium";
 import { getAccountSummary } from "@/lib/account-client";
+import {
+  formatElectionPassPrice,
+  formatElectionPassPriceShort,
+} from "@/lib/billing";
 
 export default function PricingPage() {
   const router = useRouter();
@@ -71,11 +75,12 @@ export default function PricingPage() {
             Election Pass Credits
           </div>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-            Get a full ballot guide for $1.
+            Get a full ballot guide for {formatElectionPassPriceShort()}.
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             Guest mode lets you browse ballots. Signed-in accounts can buy and
-            hold $1 Election Pass credits, then spend 1 credit to unlock a full
+            hold {formatElectionPassPriceShort()} Election Pass credits, then
+            spend 1 credit to unlock a full
             ballot guide when they are ready.
           </p>
           {account.isAuthenticated && (
@@ -184,9 +189,12 @@ export default function PricingPage() {
               ) : (
                 <div className="space-y-5">
                   <div>
-                    <h2 className="text-lg font-semibold">Buy a $1 Election Pass</h2>
+                    <h2 className="text-lg font-semibold">
+                      Buy a {formatElectionPassPriceShort()} Election Pass
+                    </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Each $1 purchase adds one credit for one full ballot guide.
+                      Each {formatElectionPassPriceShort()} purchase adds one
+                      credit for one full ballot guide.
                       You can come back later and buy more as needed.
                     </p>
                   </div>
@@ -198,7 +206,9 @@ export default function PricingPage() {
                           Adds 1 full-ballot guide credit to your account
                         </p>
                       </div>
-                      <p className="text-lg font-semibold">$1.00</p>
+                      <p className="text-lg font-semibold">
+                        {formatElectionPassPrice()}
+                      </p>
                     </div>
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row">

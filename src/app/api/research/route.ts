@@ -7,6 +7,7 @@ import {
   type MeasureResearchRequest,
   runCandidateDossierResearch,
   runMeasureDossierResearch,
+  toUserFacingResearchError,
 } from "@/lib/zai";
 import type {
   ValuesProfile,
@@ -33,7 +34,9 @@ import {
   isValidValuesProfile,
 } from "@/lib/validation";
 import {
+  sanitizeCandidateDossier,
   sanitizeCandidateResult,
+  sanitizeMeasureDossier,
   sanitizeMeasureResult,
 } from "@/lib/research-text";
 import {
@@ -129,7 +132,9 @@ async function getCandidateDossier(
     }
   }
 
-  const dossier = await runCandidateDossierResearch(req);
+  const dossier = sanitizeCandidateDossier(
+    await runCandidateDossierResearch(req)
+  );
   if (!isValidCandidateDossier(dossier)) {
     throw new Error("Candidate dossier returned an invalid result");
   }
@@ -162,7 +167,7 @@ async function getMeasureDossier(
     }
   }
 
-  const dossier = await runMeasureDossierResearch(req);
+  const dossier = sanitizeMeasureDossier(await runMeasureDossierResearch(req));
   if (!isValidMeasureDossier(dossier)) {
     throw new Error("Measure dossier returned an invalid result");
   }
@@ -661,7 +666,8 @@ export async function POST(request: NextRequest) {
               text: "Personalizing recommendation...",
             });
             const result = await personalizeCandidateDossier(item, dossier, "full");
-            if (!isValidCandidateResult(result)) {
+            const sanitizedResult = sanitizeCandidateResult(result);
+            if (!isValidCandidateResult(sanitizedResult)) {
               hasFailures = true;
               send({
                 type: "candidate_error",
@@ -671,10 +677,10 @@ export async function POST(request: NextRequest) {
               return;
             }
 
-            const normalizedResult: CandidateResult = sanitizeCandidateResult({
-              ...result,
+            const normalizedResult: CandidateResult = {
+              ...sanitizedResult,
               candidateId,
-            });
+            };
 
             send({
               type: "candidate_result",
@@ -693,28 +699,26 @@ export async function POST(request: NextRequest) {
               });
             }
           } catch (err) {
-            const message =
-              err instanceof Error ? err.message : "Research failed";
             hasFailures = true;
-
-            if (
-              err instanceof Error &&
-              "status" in err &&
-              (err as { status: number }).status === 429
-            ) {
-              send({
-                type: "candidate_error",
-                candidateId,
-                error:
-                  "Rate limited by the AI service. Please try again in a moment.",
-              });
-            } else {
-              send({
-                type: "candidate_error",
-                candidateId,
-                error: message,
-              });
-            }
+            await recordAppEvent({
+              category: "research",
+              event: "research_candidate_failed",
+              severity: "error",
+              route: "/api/research",
+              userId: user.id,
+              details: {
+                message:
+                  err instanceof Error ? err.message : "Research failed",
+              },
+            });
+            send({
+              type: "candidate_error",
+              candidateId,
+              error: toUserFacingResearchError(
+                err,
+                "Candidate research failed. Please try again."
+              ),
+            });
           }
         }
       );
@@ -748,7 +752,8 @@ export async function POST(request: NextRequest) {
               text: "Personalizing recommendation...",
             });
             const result = await personalizeMeasureDossier(item, dossier);
-            if (!isValidMeasureResult(result)) {
+            const sanitizedResult = sanitizeMeasureResult(result);
+            if (!isValidMeasureResult(sanitizedResult)) {
               hasFailures = true;
               send({
                 type: "measure_error",
@@ -758,10 +763,10 @@ export async function POST(request: NextRequest) {
               return;
             }
 
-            const normalizedResult: MeasureResult = sanitizeMeasureResult({
-              ...result,
+            const normalizedResult: MeasureResult = {
+              ...sanitizedResult,
               measureId,
-            });
+            };
 
             send({
               type: "measure_result",
@@ -780,10 +785,26 @@ export async function POST(request: NextRequest) {
               });
             }
           } catch (err) {
-            const message =
-              err instanceof Error ? err.message : "Research failed";
             hasFailures = true;
-            send({ type: "measure_error", measureId, error: message });
+            await recordAppEvent({
+              category: "research",
+              event: "research_measure_failed",
+              severity: "error",
+              route: "/api/research",
+              userId: user.id,
+              details: {
+                message:
+                  err instanceof Error ? err.message : "Research failed",
+              },
+            });
+            send({
+              type: "measure_error",
+              measureId,
+              error: toUserFacingResearchError(
+                err,
+                "Measure research failed. Please try again."
+              ),
+            });
           }
         }
       );

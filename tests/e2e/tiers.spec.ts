@@ -75,6 +75,34 @@ async function seedGuideSession(page: Page) {
   );
 }
 
+test("password sign-in exposes account recovery", async ({ page }) => {
+  await page.goto("/auth/login");
+  await expect(page.getByRole("link", { name: "Forgot password?" })).toBeVisible();
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(page.getByRole("heading", { name: "Reset Your Password" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send Reset Link" })).toBeVisible();
+});
+
+test("mobile header keeps signed-in navigation in a compact menu", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/account", async (route) => {
+    await route.fulfill({
+      json: accountSummary({
+        isAuthenticated: true,
+        trustedAccount: true,
+        electionPassCredits: 1,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Open navigation menu").click();
+  const mobileNav = page.getByRole("navigation", { name: "Mobile account navigation" });
+  await expect(mobileNav.getByRole("link", { name: "My Guides" })).toBeVisible();
+  await expect(mobileNav.getByRole("link", { name: "Account", exact: true })).toBeVisible();
+  await expect(mobileNav.getByRole("button", { name: "Sign Out" })).toBeVisible();
+});
+
 test("pricing shows guest/auth options when logged out", async ({ page }) => {
   await page.route("**/api/account", async (route) => {
     await route.fulfill({ json: accountSummary() });
@@ -141,6 +169,92 @@ test("pricing shows checkout return state", async ({ page }) => {
   await expect(
     page.getByText("Checkout completed. Your credit will appear as soon as Stripe finishes the webhook.")
   ).toBeVisible();
+});
+
+const candidateResult = {
+  candidateId: "cand-1",
+  name: "Jane Doe",
+  party: "Independent",
+  race: "Mayor",
+  alignmentScore: 82,
+  issueBreakdown: [],
+  likes: [
+    {
+      text: "Supports building more housing.",
+      sourceUrl: "https://example.com/housing",
+      sourceTitle: "Example News",
+    },
+  ],
+  concerns: [],
+  confidence: "medium",
+  reasoning: "Aligned on housing and rights priorities.",
+} as const;
+
+test("candidate cards offer a content report form", async ({ page }) => {
+  await seedGuideSession(page);
+  await page.route("**/api/research", async (route) => {
+    const events = [
+      {
+        type: "candidate_start",
+        candidateId: "cand-1",
+        name: "Jane Doe",
+        race: "Mayor",
+      },
+      { type: "candidate_result", candidateId: "cand-1", result: candidateResult },
+      { type: "done" },
+    ];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/x-ndjson",
+      body: `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
+    });
+  });
+  await page.route("**/api/account", async (route) => {
+    await route.fulfill({
+      json: accountSummary({
+        isAuthenticated: true,
+        trustedAccount: true,
+        electionPassCredits: 1,
+      }),
+    });
+  });
+  await page.route("**/api/guide-access", async (route) => {
+    await route.fulfill({
+      json: {
+        unlocked: true,
+        canUnlock: false,
+        source: "existing",
+        electionPassCredits: 1,
+      },
+    });
+  });
+  await page.route("**/api/starter-analysis", async (route) => {
+    await route.fulfill({ json: {} });
+  });
+  let reportPayload: Record<string, unknown> | null = null;
+  await page.route("**/api/reports", async (route) => {
+    reportPayload = route.request().postDataJSON();
+    await route.fulfill({ status: 201, json: { id: "report-1", status: "open" } });
+  });
+
+  await page.goto("/guide");
+
+  await page.getByRole("button", { name: "Report a problem" }).first().click();
+  await page
+    .getByPlaceholder(/Tell us what is incorrect/)
+    .fill("The party label is wrong.");
+  await page.getByRole("button", { name: "Submit report" }).click();
+
+  await expect(
+    page.getByText("Thanks. Your report was received", { exact: false })
+  ).toBeVisible();
+  expect(reportPayload).toMatchObject({
+    category: "inaccurate_claim",
+    subjectType: "candidate",
+    subjectName: "Jane Doe",
+    raceName: "Mayor",
+    details: "The party label is wrong.",
+  });
 });
 
 test("guide shows account gate for guests", async ({ page }) => {

@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -23,6 +25,10 @@ jobs:
       STRIPE_SECRET_KEY: "sk_test_ci"
       STRIPE_PRICE_ELECTION_PASS: "price_ci"
       ZAI_API_KEY: "test-zai-key"
+      VITE_POLIS_API_URL: "https://polis.example"
+      VITE_SUPABASE_URL: "https://example.supabase.co"
+      VITE_SUPABASE_ANON_KEY: "test-anon-key"
+      VITE_STOREKIT_PRODUCT_ID: "com.ateliersw.polis.election_pass"
 
     steps:
       - name: Check out repository

@@ -23,6 +23,10 @@ import {
   isValidCandidateDossier,
   isValidMeasureDossier,
 } from "@/lib/validation";
+import {
+  sanitizeCandidateDossier,
+  sanitizeMeasureDossier,
+} from "@/lib/research-text";
 import { createEmptyValuesProfile } from "@/lib/types";
 import { getSameOriginError } from "@/lib/csrf";
 import {
@@ -173,8 +177,8 @@ export async function POST(request: NextRequest) {
         state: item.state,
         profile,
       };
-      const dossier: CandidateDossier = await runCandidateDossierResearch(
-        requestBody
+      const dossier: CandidateDossier = sanitizeCandidateDossier(
+        await runCandidateDossierResearch(requestBody)
       );
       if (!isValidCandidateDossier(dossier)) {
         throw new Error("Z.AI returned an invalid candidate dossier");
@@ -201,8 +205,8 @@ export async function POST(request: NextRequest) {
         state: item.state,
         profile,
       };
-      const dossier: MeasureDossier = await runMeasureDossierResearch(
-        requestBody
+      const dossier: MeasureDossier = sanitizeMeasureDossier(
+        await runMeasureDossierResearch(requestBody)
       );
       if (!isValidMeasureDossier(dossier)) {
         throw new Error("Z.AI returned an invalid measure dossier");

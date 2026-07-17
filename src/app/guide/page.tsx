@@ -334,11 +334,15 @@ export default function GuidePage() {
 
     const timeout = window.setTimeout(() => {
       prefetchedBallotKeysRef.current.add(ballotKey);
-      void fetchWithAiConsent("/api/research/prefetch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ballotInput }),
-      }).catch(() => {
+      void fetchWithAiConsent(
+        "/api/research/prefetch",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ballotInput }),
+        },
+        { redirectOnConsentRequired: false }
+      ).catch(() => {
         prefetchedBallotKeysRef.current.delete(ballotKey);
       });
     }, 2500);

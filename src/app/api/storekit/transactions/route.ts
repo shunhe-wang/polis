@@ -6,32 +6,20 @@ import { recordAppEvent } from "@/lib/observability";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { User } from "@supabase/supabase-js";
+import { getBearerAccessToken, getMobileCorsHeaders } from "@/lib/mobile-request";
 
 export const runtime = "nodejs";
 
 const ROUTE = "/api/storekit/transactions";
 
-function getMobileCorsHeaders(request: Request): Record<string, string> | null {
-  const origin = request.headers.get("origin");
-  const allowedOrigin = process.env.MOBILE_APP_ORIGIN?.trim();
-  if (!origin || !allowedOrigin || origin !== allowedOrigin) return null;
-
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    Vary: "Origin",
-  };
-}
-
 export async function OPTIONS(request: Request) {
-  const headers = getMobileCorsHeaders(request);
+  const headers = getMobileCorsHeaders(request, ["POST"]);
   if (!headers) return new Response(null, { status: 403 });
   return new Response(null, { status: 204, headers });
 }
 
 export async function POST(request: Request) {
-  const corsHeaders = getMobileCorsHeaders(request);
+  const corsHeaders = getMobileCorsHeaders(request, ["POST"]);
   const respond = (body: unknown, status = 200) =>
     Response.json(body, { status, headers: corsHeaders ?? undefined });
   const csrfError = corsHeaders ? null : getSameOriginError(request);
@@ -61,14 +49,11 @@ export async function POST(request: Request) {
     return respond({ error: "Purchase verification is not configured" }, 503);
   }
 
-  const authorization = request.headers.get("authorization");
+  const accessToken = getBearerAccessToken(request);
   let user: User | null = null;
-  if (authorization?.startsWith("Bearer ")) {
-    const accessToken = authorization.slice("Bearer ".length).trim();
-    if (accessToken) {
-      const result = await admin.auth.getUser(accessToken);
-      user = result.data.user;
-    }
+  if (accessToken) {
+    const result = await admin.auth.getUser(accessToken);
+    user = result.data.user;
   } else if (supabase) {
     const result = await supabase.auth.getUser();
     user = result.data.user;
@@ -79,6 +64,19 @@ export async function POST(request: Request) {
 
   const trust = getAccountTrustStatus(user);
   if (!trust.trusted) {
+    // At this point StoreKit has already charged the customer, so a blocked
+    // fulfillment must be loudly visible for manual reconciliation.
+    await recordAppEvent({
+      category: "billing",
+      event: "app_store_transaction_failed",
+      severity: "error",
+      route: ROUTE,
+      userId: user.id,
+      details: {
+        message: "Paid App Store transaction blocked by the account trust gate",
+        reason: trust.reason,
+      },
+    });
     return respond({ error: trust.reason }, 403);
   }
 

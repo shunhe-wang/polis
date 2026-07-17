@@ -20,11 +20,19 @@ function isConsentRequiredPayload(
 
 export async function fetchWithAiConsent(
   input: RequestInfo | URL,
-  init?: RequestInit
+  init?: RequestInit,
+  options?: { redirectOnConsentRequired?: boolean }
 ): Promise<Response> {
   const response = await fetch(input, init);
 
   if (response.status !== AI_CONSENT_REQUIRED_STATUS) {
+    return response;
+  }
+
+  // Background callers (for example the guide prefetch) must never
+  // force-navigate the user to the consent page; only a user-initiated AI
+  // action should surface the interstitial.
+  if (options?.redirectOnConsentRequired === false) {
     return response;
   }
 

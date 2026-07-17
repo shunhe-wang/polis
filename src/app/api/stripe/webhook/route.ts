@@ -90,6 +90,50 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   });
 }
 
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  const admin = createAdminClient();
+  if (!admin) {
+    throw new Error("Supabase service role is not configured");
+  }
+
+  const paymentIntentId =
+    typeof charge.payment_intent === "string" ? charge.payment_intent : null;
+  if (!paymentIntentId) {
+    await recordAppEvent({
+      category: "billing",
+      event: "charge_refunded_unmatched",
+      severity: "warning",
+      route: "/api/stripe/webhook",
+      details: { chargeId: charge.id, message: "No payment intent on charge" },
+    });
+    return;
+  }
+
+  const { data, error } = await admin.rpc("revoke_billing_order", {
+    p_stripe_payment_intent_id: paymentIntentId,
+    p_reason: "charge.refunded",
+  });
+  if (error) {
+    throw new Error(`Failed to revoke refunded order: ${error.message}`);
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+  await recordAppEvent({
+    category: "billing",
+    event: "billing_order_refunded",
+    severity: "warning",
+    route: "/api/stripe/webhook",
+    details: {
+      chargeId: charge.id,
+      paymentIntentId,
+      amountRefunded: charge.amount_refunded,
+      foundOrder: Boolean(result?.found_order),
+      alreadyRevoked: Boolean(result?.already_revoked),
+      creditsRevoked: Number(result?.credits_revoked ?? 0),
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   const stripe = getStripeClient();
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -129,6 +173,8 @@ export async function POST(request: NextRequest) {
       await handleCheckoutCompleted(
         event.data.object as Stripe.Checkout.Session
       );
+    } else if (event.type === "charge.refunded") {
+      await handleChargeRefunded(event.data.object as Stripe.Charge);
     }
   } catch (error) {
     await recordAppEvent({

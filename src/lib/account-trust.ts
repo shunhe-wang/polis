@@ -1,5 +1,3 @@
-import type { User } from "@supabase/supabase-js";
-
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "10minutemail.com",
   "20minutemail.com",
@@ -57,7 +55,10 @@ export function shouldBlockDisposableEmails(): boolean {
 }
 
 export function getAccountTrustStatus(
-  user: Pick<User, "email" | "email_confirmed_at"> | null
+  user: {
+    email?: string | null;
+    email_confirmed_at?: string | null;
+  } | null
 ): AccountTrustStatus {
   const requiresVerifiedEmail = shouldRequireVerifiedEmail();
   const requiresNonDisposableEmail = shouldBlockDisposableEmails();

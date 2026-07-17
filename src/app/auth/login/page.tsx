@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -10,17 +10,40 @@ import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { syncToSupabase } from "@/lib/persistence";
 
+// The values read below never change during a page visit, so the store never
+// emits; useSyncExternalStore is used purely for its hydration-safe
+// server-snapshot handling.
+const subscribeToNothing = () => () => {};
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+
+  // The server render has no query string; useSyncExternalStore hydrates with
+  // the server snapshot and re-renders with the client value without a
+  // hydration mismatch.
+  const authCallbackFailed = useSyncExternalStore(
+    subscribeToNothing,
+    () =>
+      new URLSearchParams(window.location.search).get("error") ===
+      "auth_failed",
+    () => false
+  );
+  const displayedError =
+    error ??
+    (authCallbackFailed && !hasSubmitted
+      ? "We couldn't finish signing you in. Please try again."
+      : null);
 
   const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setHasSubmitted(true);
     if (!supabase) {
       setError("Authentication is not configured yet.");
       return;
@@ -72,7 +95,15 @@ export default function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="password">Password</Label>
+                  <Link
+                    href="/auth/forgot-password"
+                    className="text-xs underline underline-offset-2 hover:text-foreground"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input
                   id="password"
                   type="password"
@@ -83,8 +114,8 @@ export default function LoginPage() {
                 />
               </div>
 
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
+              {displayedError && (
+                <p className="text-sm text-destructive">{displayedError}</p>
               )}
 
               <Button

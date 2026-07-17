@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ELECTION_PASS_PRICE_CENTS, getProductPriceId } from "@/lib/billing";
+import { getStripeClient } from "@/lib/stripe";
 
 export interface AdminEventRow {
   category: string;
@@ -28,7 +30,8 @@ interface AdminOperationsInput {
   events: AdminEventRow[];
   orders: AdminOrderRow[];
   appStoreTransactions: AdminAppStoreTransactionRow[];
-  unfulfilledAppStoreTransactions: number;
+  openContentReports: number;
+  oldestOpenContentReportAt: string | null;
   providerPricing: ProviderPricing | null;
   latestElectionDataProbe: AdminEventRow | null;
   now?: Date;
@@ -68,7 +71,10 @@ export interface AdminDashboardData {
   unfulfilledOrders: number;
   appStorePurchases24h: number;
   appStoreCreditsGranted24h: number;
-  unfulfilledAppStoreTransactions: number;
+  appStoreFulfillmentFailures24h: number;
+  purchaseRevocations24h: number;
+  openContentReports: number;
+  oldestOpenContentReportAt: string | null;
   recordedQuotaDenials24h: number;
   electionDataStatus: ElectionDataStatus;
   latestElectionDataProbeAt: string | null;
@@ -167,7 +173,19 @@ export function summarizeAdminOperations(
         total + Number(transaction.credits_granted ?? 0),
       0
     ),
-    unfulfilledAppStoreTransactions: input.unfulfilledAppStoreTransactions,
+    // A fulfilled_at IS NULL query can never fire (the fulfillment RPC sets it
+    // in the same database transaction as the insert), so failed fulfillments
+    // are counted from recorded failure events instead.
+    appStoreFulfillmentFailures24h: input.events.filter(
+      (event) => event.event === "app_store_transaction_failed"
+    ).length,
+    purchaseRevocations24h: input.events.filter(
+      (event) =>
+        event.event === "app_store_transaction_revoked" ||
+        event.event === "billing_order_refunded"
+    ).length,
+    openContentReports: input.openContentReports,
+    oldestOpenContentReportAt: input.oldestOpenContentReportAt,
     recordedQuotaDenials24h: input.events.filter(
       (event) =>
         event.event.endsWith("_quota_reached") ||
@@ -223,6 +241,40 @@ function getProviderPricing(): ProviderPricing | null {
   };
 }
 
+const USERS_PAGE_SIZE = 1000;
+const USERS_MAX_PAGES = 20;
+
+async function listAllUsers(admin: SupabaseClient): Promise<{
+  users: Array<{ email?: string | null }>;
+  total: number;
+  truncated: boolean;
+  error: unknown;
+}> {
+  const users: Array<{ email?: string | null }> = [];
+  let total = 0;
+  for (let page = 1; page <= USERS_MAX_PAGES; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: USERS_PAGE_SIZE,
+    });
+    if (error) return { users, total, truncated: false, error };
+    const batch = data?.users ?? [];
+    users.push(...batch);
+    total = Number(
+      (data as { total?: number } | null)?.total ?? users.length
+    );
+    if (batch.length < USERS_PAGE_SIZE) {
+      return { users, total, truncated: false, error: null };
+    }
+  }
+  return {
+    users,
+    total: Math.max(total, users.length),
+    truncated: true,
+    error: null,
+  };
+}
+
 export async function loadAdminDashboardData(
   admin: SupabaseClient
 ): Promise<AdminDashboardData> {
@@ -234,11 +286,12 @@ export async function loadAdminDashboardData(
     ordersResult,
     unfulfilledResult,
     appStoreTransactionsResult,
-    unfulfilledAppStoreResult,
+    openReportsResult,
+    oldestOpenReportResult,
     latestProbeResult,
   ] = await Promise.all([
-    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    admin.from("saved_guides").select("id", { count: "exact", head: true }),
+    listAllUsers(admin),
+    admin.from("voter_guides").select("id", { count: "exact", head: true }),
     admin
       .from("app_event_logs")
       .select("category, event, severity, route, created_at, details")
@@ -258,9 +311,16 @@ export async function loadAdminDashboardData(
       .select("credits_granted, fulfilled_at")
       .gte("purchase_date", since),
     admin
-      .from("app_store_transactions")
-      .select("transaction_id", { count: "exact", head: true })
-      .is("fulfilled_at", null),
+      .from("content_reports")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["open", "in_review"]),
+    admin
+      .from("content_reports")
+      .select("created_at")
+      .in("status", ["open", "in_review"])
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
     admin
       .from("app_event_logs")
       .select("category, event, severity, route, created_at, details")
@@ -292,8 +352,8 @@ export async function loadAdminDashboardData(
   if (appStoreTransactionsResult.error) {
     warnings.push("Recent App Store purchase totals are unavailable.");
   }
-  if (unfulfilledAppStoreResult.error) {
-    warnings.push("App Store reconciliation status is unavailable.");
+  if (openReportsResult.error || oldestOpenReportResult.error) {
+    warnings.push("Content-report status is unavailable.");
   }
   if (latestProbeResult.error) {
     warnings.push("Election-data freshness is unavailable.");
@@ -304,12 +364,38 @@ export async function loadAdminDashboardData(
     );
   }
 
-  const users = usersResult.data?.users ?? [];
+  if (usersResult.truncated) {
+    warnings.push(
+      `User metrics are capped at the first ${USERS_PAGE_SIZE * USERS_MAX_PAGES} accounts.`
+    );
+  }
+
+  // The pricing page displays ELECTION_PASS_PRICE_CENTS while Stripe charges
+  // whatever the configured price object says; surface any drift before it
+  // becomes a mislabeled charge.
+  const stripe = getStripeClient();
+  const electionPassPriceId = getProductPriceId("election_pass");
+  if (stripe && electionPassPriceId) {
+    try {
+      const price = await stripe.prices.retrieve(electionPassPriceId);
+      if (
+        typeof price.unit_amount === "number" &&
+        (price.unit_amount !== ELECTION_PASS_PRICE_CENTS ||
+          price.currency !== "usd")
+      ) {
+        warnings.push(
+          `The configured Stripe Election Pass price (${price.unit_amount} ${price.currency}) does not match the displayed price (${ELECTION_PASS_PRICE_CENTS} usd).`
+        );
+      }
+    } catch {
+      warnings.push("The Stripe Election Pass price could not be verified.");
+    }
+  }
+
+  const users = usersResult.users;
   const proEmails = getConfiguredProEmails();
   const summary = summarizeAdminOperations({
-    totalUsers: usersResult.error
-      ? 0
-      : Number(usersResult.data?.total ?? users.length),
+    totalUsers: usersResult.error ? 0 : usersResult.total,
     activeGuides: guidesResult.error ? 0 : Number(guidesResult.count ?? 0),
     configuredProUsers: users.filter((user) =>
       proEmails.has(user.email?.toLowerCase() ?? "")
@@ -319,9 +405,13 @@ export async function loadAdminDashboardData(
       : Number(unfulfilledResult.count ?? 0),
     appStoreTransactions: (appStoreTransactionsResult.data ?? []) as
       AdminAppStoreTransactionRow[],
-    unfulfilledAppStoreTransactions: unfulfilledAppStoreResult.error
+    openContentReports: openReportsResult.error
       ? 0
-      : Number(unfulfilledAppStoreResult.count ?? 0),
+      : Number(openReportsResult.count ?? 0),
+    oldestOpenContentReportAt: oldestOpenReportResult.error
+      ? null
+      : ((oldestOpenReportResult.data as { created_at: string } | null)
+          ?.created_at ?? null),
     events: (eventsResult.data ?? []) as AdminEventRow[],
     orders: (ordersResult.data ?? []) as AdminOrderRow[],
     providerPricing,

@@ -6,13 +6,17 @@ import {
   getStarterAnalysisIpQuotaRules,
   getStarterAnalysisRemaining,
   enforceQuotaRules,
+  refundStarterAnalysisReservation,
 } from "@/lib/ai-quotas";
 import {
   isZaiConfigured,
   personalizeCandidateDossier,
   runCandidateDossierResearch,
 } from "@/lib/zai";
-import { sanitizeCandidateResult } from "@/lib/research-text";
+import {
+  sanitizeCandidateDossier,
+  sanitizeCandidateResult,
+} from "@/lib/research-text";
 import { buildStarterAnalysisHashes } from "@/lib/research-cache";
 import {
   buildCandidateDossierKey,
@@ -186,6 +190,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const admin = createAdminClient();
+  let reservedStarter = false;
+  const refundReservation = async () => {
+    if (!reservedStarter || !admin) return;
+    try {
+      await refundStarterAnalysisReservation(admin, user.id);
+    } catch {
+      // Best-effort refund only; the persisted analysis row remains the
+      // durable per-account gate.
+    }
+  };
+
   try {
     const ipQuotaFailure = await enforceQuotaRules(
       supabase,
@@ -202,8 +218,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const quotaFailure = await enforceStarterAnalysisQuota(supabase);
-    if (quotaFailure) {
+    // Atomically reserve the free starter analysis before any paid AI work so
+    // concurrent requests cannot all pass a read-only check and each receive a
+    // free analysis. Failure paths refund the reservation so a failed AI call
+    // never burns the user's single free analysis.
+    const starterQuotaFailure = await enforceStarterAnalysisQuota(supabase);
+    if (starterQuotaFailure) {
       await recordAppEvent({
         category: "research",
         event: "starter_quota_reached",
@@ -220,6 +240,7 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+    reservedStarter = true;
   } catch (error) {
     await recordAppEvent({
       category: "research",
@@ -252,7 +273,6 @@ export async function POST(request: NextRequest) {
       state: body.state,
       profile: body.valuesProfile,
     };
-    const admin = createAdminClient();
     const dossierKey = buildCandidateDossierKey(
       body.candidate,
       body.race,
@@ -269,7 +289,16 @@ export async function POST(request: NextRequest) {
       : null;
 
     if (!dossier || !isValidCandidateDossier(dossier)) {
-      dossier = await runCandidateDossierResearch(researchRequest);
+      dossier = sanitizeCandidateDossier(
+        await runCandidateDossierResearch(researchRequest)
+      );
+      if (!isValidCandidateDossier(dossier)) {
+        // One retry: GLM occasionally returns a structurally-off dossier. A
+        // single retry recovers most transient cases before we give up.
+        dossier = sanitizeCandidateDossier(
+          await runCandidateDossierResearch(researchRequest)
+        );
+      }
       if (!isValidCandidateDossier(dossier)) {
         await recordAppEvent({
           category: "research",
@@ -278,6 +307,7 @@ export async function POST(request: NextRequest) {
           route: "/api/starter-analysis",
           userId: user.id,
         });
+        await refundReservation();
         return NextResponse.json(
           { error: "Starter analysis returned an invalid dossier" },
           { status: 502 }
@@ -300,21 +330,30 @@ export async function POST(request: NextRequest) {
     const cachedPersonalized = admin
       ? await loadCandidatePersonalizationCache(admin, personalizationKey)
       : null;
-    const result =
+
+    const sanitizePersonalized = (result: CandidateResult) =>
+      sanitizeCandidateResult({ ...result, candidateId: body.candidate.id });
+
+    let sanitizedResult =
       cachedPersonalized && isValidCandidateResult(cachedPersonalized)
-        ? cachedPersonalized
-        : await personalizeCandidateDossier(
-            researchRequest,
-            dossier,
-            "starter"
+        ? sanitizePersonalized(cachedPersonalized)
+        : sanitizePersonalized(
+            await personalizeCandidateDossier(
+              researchRequest,
+              dossier,
+              "starter"
+            )
           );
 
-    const sanitizedResult = sanitizeCandidateResult({
-      ...result,
-      candidateId: body.candidate.id,
-    });
+    if (!isValidCandidateResult(sanitizedResult)) {
+      // One retry for transient malformed personalization output.
+      sanitizedResult = sanitizePersonalized(
+        await personalizeCandidateDossier(researchRequest, dossier, "starter")
+      );
+    }
 
     if (!isValidCandidateResult(sanitizedResult)) {
+      await refundReservation();
       return NextResponse.json(
         { error: "Starter analysis returned an invalid result" },
         { status: 502 }
@@ -366,13 +405,9 @@ export async function POST(request: NextRequest) {
           error instanceof Error ? error.message : "Starter analysis failed",
       },
     });
+    await refundReservation();
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Starter analysis failed",
-      },
+      { error: "Starter analysis is unavailable right now. Try again shortly." },
       { status: 502 }
     );
   }

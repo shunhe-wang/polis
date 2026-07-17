@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  sanitizeCandidateDossier,
   sanitizeCandidateResult,
   sanitizeMeasureResult,
   sanitizeResearchText,
 } from "@/lib/research-text";
+import { isValidCandidateDossier } from "@/lib/validation";
 
 describe("research text sanitization", () => {
   it("removes cite tags and inline citation markers", () => {
@@ -55,6 +57,70 @@ describe("research text sanitization", () => {
     );
   });
 
+  it("drops candidate likes and concerns that lack a usable source", () => {
+    const result = sanitizeCandidateResult({
+      candidateId: "cand-1",
+      name: "Jane Doe",
+      party: null,
+      race: "Mayor",
+      alignmentScore: 50,
+      issueBreakdown: [],
+      likes: [
+        {
+          text: "Sourced strength.",
+          sourceUrl: "https://example.com",
+          sourceTitle: "Example",
+        },
+        { text: "No source here.", sourceUrl: "", sourceTitle: "" },
+      ],
+      concerns: [
+        { text: "Missing source.", sourceUrl: "  ", sourceTitle: "Anon" },
+      ],
+      confidence: "low",
+      reasoning: "Limited information available.",
+    });
+
+    expect(result.likes).toHaveLength(1);
+    expect(result.likes[0].text).toBe("Sourced strength.");
+    expect(result.concerns).toHaveLength(0);
+  });
+
+  it("salvages a thin-source dossier into a valid one instead of failing", () => {
+    const sanitized = sanitizeCandidateDossier({
+      name: "Robert Steadman",
+      party: "Republican",
+      race: "US Senate - DC",
+      state: "DC",
+      overview: "No credible information was found for this candidate.",
+      issueEvidence: [
+        {
+          issue: "economy",
+          summary: "No information found.",
+          stance: "Unknown - no available evidence",
+        },
+      ],
+      strengths: [
+        {
+          text: "No verifiable strengths could be identified.",
+          sourceUrl: "",
+          sourceTitle: "No sources available",
+        },
+      ],
+      concerns: [
+        {
+          text: "A real sourced concern.",
+          sourceUrl: "https://example.gov",
+          sourceTitle: "Gov source",
+        },
+      ],
+      confidence: "low",
+    });
+
+    expect(sanitized.strengths).toHaveLength(0);
+    expect(sanitized.concerns).toHaveLength(1);
+    expect(isValidCandidateDossier(sanitized)).toBe(true);
+  });
+
   it("sanitizes measure summaries and analysis", () => {
     const result = sanitizeMeasureResult({
       measureId: "measure-1",
@@ -83,5 +149,53 @@ describe("research text sanitization", () => {
     expect(result.summary).toBe("Summary text.");
     expect(result.consForVoter[0].text).toBe("Raises costs maybe.");
     expect(result.reasoning).toBe("Reasoning text.");
+  });
+});
+
+describe("sanitizing structurally malformed AI output", () => {
+  it("passes malformed dossiers through for the validator to reject", () => {
+    const missingArrays = {
+      name: "X",
+      race: "Y",
+      state: "NY",
+      overview: "Text",
+      confidence: "low",
+    };
+    expect(() =>
+      sanitizeCandidateDossier(missingArrays as never)
+    ).not.toThrow();
+    expect(
+      isValidCandidateDossier(sanitizeCandidateDossier(missingArrays as never))
+    ).toBe(false);
+  });
+
+  it("tolerates null claim text and non-object claims", () => {
+    const dossier = {
+      name: "X",
+      party: null,
+      race: "Y",
+      state: "NY",
+      overview: "Text",
+      issueEvidence: [],
+      strengths: [
+        { text: null, sourceUrl: "https://example.com", sourceTitle: "T" },
+        "not-an-object",
+        { text: "Valid", sourceUrl: "https://example.com", sourceTitle: "T" },
+      ],
+      concerns: [],
+      confidence: "low",
+    };
+    const sanitized = sanitizeCandidateDossier(dossier as never);
+    expect(sanitized.strengths).toHaveLength(1);
+    expect(sanitized.strengths[0].text).toBe("Valid");
+    expect(isValidCandidateDossier(sanitized)).toBe(true);
+  });
+
+  it("tolerates non-object results and non-string fields", () => {
+    expect(() => sanitizeCandidateResult(null as never)).not.toThrow();
+    expect(() => sanitizeMeasureResult(42 as never)).not.toThrow();
+    expect(() =>
+      sanitizeCandidateResult({ reasoning: 7, likes: {} } as never)
+    ).not.toThrow();
   });
 });

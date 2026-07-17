@@ -2,22 +2,31 @@
   "name": "polis",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "mobile"
+  ],
   "engines": {
     "node": ">=22.13.0 <23"
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build:web && npm run build:mobile",
+    "build:web": "next build",
+    "build:mobile": "npm run build --workspace @polis/mobile",
     "start": "next start",
-    "lint": "eslint",
-    "test": "vitest run",
+    "lint": "eslint && npm run check --workspace @polis/mobile",
+    "test": "vitest run && npm run test --workspace @polis/mobile",
+    "eval:golden": "vitest run --config vitest.eval.config.ts",
+    "eval:coverage": "node evals/run-coverage.mjs",
+    "mobile:sync": "npm run sync:ios --workspace @polis/mobile",
+    "mobile:open": "npm run open:ios --workspace @polis/mobile",
     "test:e2e": "npm run build && playwright test"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
     "@base-ui/react": "^1.3.0",
     "@supabase/ssr": "^0.9.0",
-    "@supabase/supabase-js": "^2.99.3",
+    "@supabase/supabase-js": "2.99.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.577.0",
