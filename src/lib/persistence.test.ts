@@ -78,7 +78,8 @@ function createSupabaseMock(options?: {
 
       throw new Error(`Unexpected table ${table}`);
     }),
-  };
+  // This offline fake implements only the client surface used by persistence.
+  } as unknown as NonNullable<ReturnType<typeof createClient>>;
 }
 
 describe("persistence", () => {
