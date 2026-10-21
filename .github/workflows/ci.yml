@@ -44,6 +44,9 @@ jobs:
           NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Verify TLS CA selection on loopback
+        run: npm run test:tls-policy
+
       - name: Run unit tests
         run: npm test
 

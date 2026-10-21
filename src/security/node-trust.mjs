@@ -17,11 +17,18 @@ if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
   throw new Error("TLS certificate verification must remain enabled.");
 }
 if (typeof tls.getCACertificates !== "function" || typeof tls.setDefaultCACertificates !== "function") {
-  throw new Error("The TLS trust policy requires Node 22.19 or newer.");
+  throw new Error("The TLS trust policy requires Node 22.19+ or Node 24.5+.");
 }
 
 let selectedCertificates = tls.getCACertificates("default");
-if (selectedCertificates.length === 0) {
+const extraCertificates = tls.getCACertificates("extra");
+// Node appends extras without deduplicating. OpenSSL mode enumerates only those
+// extras, even though its CA file/directory still participates in verification.
+// Preserve order and multiplicity here: set subtraction would misclassify a
+// bundled store whose roots are also present in the extra bundle.
+const onlyExtrasEnumerated = selectedCertificates.length === extraCertificates.length
+  && selectedCertificates.every((pem, index) => pem === extraCertificates[index]);
+if (onlyExtrasEnumerated) {
   // Node does not enumerate OpenSSL's lazy-loaded CA file/directory through
   // getCACertificates(). Only reconstruct it when BOTH paths are explicit;
   // falling back to bundled roots could restore a CA the operator distrusted.
@@ -43,7 +50,7 @@ if (selectedCertificates.length === 0) {
       }
     }
   }
-  selectedCertificates.push(...tls.getCACertificates("extra"));
+  selectedCertificates.push(...extraCertificates);
 }
 
 const certificates = selectedCertificates.filter((pem) => {

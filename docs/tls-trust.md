@@ -11,9 +11,11 @@ Do not restore connectivity by disabling verification or supplying an affected C
 When using OpenSSL CA mode, set both `SSL_CERT_FILE` and `SSL_CERT_DIR` explicitly.
 The policy loads only those selected sources plus Node's extra CAs; it fails closed when they cannot be enumerated.
 
+Load this policy before any other code calls `tls.setDefaultCACertificates()`; a previously replaced programmatic default store is unsupported.
+
 Custom clients with their own `ca` option, other processes, and non-Node runtimes need separate verification.
 
-Use Node 22.19+ or Node 24+.
+Use Node 22.19+ or Node 24.5+.
 The development/build/start commands preload the policy, and Next's Node instrumentation hook applies it before a new server instance handles requests, including Vercel Functions.
 The hook is not imported into Edge bundles or browser code.
 Existing deployments require a separately approved redeployment; changing this repository does not patch a running function.
@@ -26,6 +28,8 @@ NODE_OPTIONS="--import=\"$POLIS_TLS_PRELOAD\" ${NODE_OPTIONS-}" npm ci
 ```
 
 CI sets that preload before `npm ci`.
+`npm run test:tls-policy` checks unaffected CA preservation on offline loopback TLS, including OpenSSL file/directory trust with extra CAs and duplicated bundled roots. It requires OpenSSL.
+
 For an opt-in live check using only unauthenticated test requests:
 
 ```sh
