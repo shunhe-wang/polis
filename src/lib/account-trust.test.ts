@@ -1,19 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getAccountTrustStatus,
   isDisposableEmailDomain,
 } from "@/lib/account-trust";
 
-const originalEnv = {
-  REQUIRE_VERIFIED_EMAIL: process.env.REQUIRE_VERIFIED_EMAIL,
-  BLOCK_DISPOSABLE_EMAILS: process.env.BLOCK_DISPOSABLE_EMAILS,
-  NODE_ENV: process.env.NODE_ENV,
-};
-
 afterEach(() => {
-  process.env.REQUIRE_VERIFIED_EMAIL = originalEnv.REQUIRE_VERIFIED_EMAIL;
-  process.env.BLOCK_DISPOSABLE_EMAILS = originalEnv.BLOCK_DISPOSABLE_EMAILS;
-  process.env.NODE_ENV = originalEnv.NODE_ENV;
+  vi.unstubAllEnvs();
 });
 
 describe("account trust", () => {
@@ -23,13 +15,13 @@ describe("account trust", () => {
   });
 
   it("requires verified email when configured", () => {
-    process.env.NODE_ENV = "test";
-    process.env.REQUIRE_VERIFIED_EMAIL = "true";
-    process.env.BLOCK_DISPOSABLE_EMAILS = "false";
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("REQUIRE_VERIFIED_EMAIL", "true");
+    vi.stubEnv("BLOCK_DISPOSABLE_EMAILS", "false");
 
     const status = getAccountTrustStatus({
       email: "voter@example.com",
-      email_confirmed_at: null,
+      email_confirmed_at: undefined,
     });
 
     expect(status.trusted).toBe(false);
@@ -37,9 +29,9 @@ describe("account trust", () => {
   });
 
   it("blocks disposable domains when configured", () => {
-    process.env.NODE_ENV = "test";
-    process.env.REQUIRE_VERIFIED_EMAIL = "false";
-    process.env.BLOCK_DISPOSABLE_EMAILS = "true";
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("REQUIRE_VERIFIED_EMAIL", "false");
+    vi.stubEnv("BLOCK_DISPOSABLE_EMAILS", "true");
 
     const status = getAccountTrustStatus({
       email: "voter@mailinator.com",

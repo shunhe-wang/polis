@@ -30,15 +30,24 @@ jobs:
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npm ci
 
       - name: Reject high-severity production advisories
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify TLS CA selection on loopback
+        run: npm run test:tls-policy
 
       - name: Run unit tests
         run: npm test
@@ -50,7 +59,11 @@ jobs:
         run: npm run build
 
       - name: Install browser
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npx playwright install --with-deps chromium
 
       - name: Run browser tests
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npx playwright test
