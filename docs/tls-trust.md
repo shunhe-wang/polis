@@ -27,7 +27,8 @@ POLIS_TLS_PRELOAD="$(pwd)/src/security/node-trust.mjs"
 NODE_OPTIONS="--import=\"$POLIS_TLS_PRELOAD\" ${NODE_OPTIONS-}" npm ci
 ```
 
-CI sets that preload before `npm ci`.
+CI sets that preload for the Node setup action (which itself runs on Node 24), `npm ci`, npm audit and Playwright download/test commands.
+The initial GitHub checkout and non-Node build tools depend on their platform trust and require separate patching.
 `npm run test:tls-policy` checks unaffected CA preservation on offline loopback TLS, including OpenSSL file/directory trust with extra CAs and duplicated bundled roots. It requires OpenSSL.
 
 For an opt-in live check using only unauthenticated test requests:
