@@ -35,9 +35,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npm ci
 
       - name: Reject high-severity production advisories
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npm audit --omit=dev --audit-level=high
 
       - name: Run unit tests
@@ -50,7 +54,11 @@ jobs:
         run: npm run build
 
       - name: Install browser
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npx playwright install --with-deps chromium
 
       - name: Run browser tests
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/src/security/node-trust.mjs
         run: npx playwright test
